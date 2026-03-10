@@ -30,7 +30,7 @@ export default function LandingPage() {
     <div className="hero-gradient min-h-screen">
       {/* Navbar */}
       <nav style={{ borderBottom: '1px solid var(--border)' }} className="glass sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="page-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 64 }}>
           <div className="flex items-center gap-2">
             <span className="material-symbols-rounded" style={{ color: 'var(--accent-purple)', fontSize: 28 }}>piano</span>
             <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 22, color: 'var(--text-primary)' }}>Melodica</span>
@@ -56,22 +56,23 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero */}
-      <section className="max-w-7xl mx-auto px-6 pt-28 pb-20 text-center">
-        <div className="badge mb-6 inline-block">✦ Powered by Advanced AI</div>
-        <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 'clamp(42px, 6vw, 80px)', fontWeight: 800, lineHeight: 1.05, marginBottom: 24 }}>
-          AI That Understands<br />
-          <span className="gradient-text">the Soul of Music</span>
-        </h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: 18, maxWidth: 580, margin: '0 auto 40px', lineHeight: 1.7 }}>
-          Experience the future of music generation and editing with Melodica. Create, edit, and transcribe effortlessly with an intuitive AI copilot.
-        </p>
-        <div className="flex items-center justify-center gap-4 flex-wrap">
-          <Link href="/signup" className="btn-primary" style={{ fontSize: 16, padding: '14px 36px' }}>Start Creating Free</Link>
-          <Link href="/studio" className="btn-secondary" style={{ fontSize: 16, padding: '14px 36px', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span className="material-symbols-rounded" style={{ fontSize: 20 }}>play_circle</span>
-            Watch Demo
-          </Link>
-        </div>
+      <section style={{ paddingTop: 'clamp(60px, 10vw, 120px)', paddingBottom: 'clamp(40px, 6vw, 80px)' }}>
+        <div className="page-container" style={{ textAlign: 'center' }}>
+          <div className="badge mb-6 inline-block">✦ Powered by Advanced AI</div>
+          <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 'clamp(38px, 6vw, 80px)', fontWeight: 800, lineHeight: 1.05, marginBottom: 24 }}>
+            AI That Understands<br />
+            <span className="gradient-text">the Soul of Music</span>
+          </h1>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 18, maxWidth: 560, margin: '0 auto 40px', lineHeight: 1.7 }}>
+            Experience the future of music generation and editing with Melodica. Create, edit, and transcribe effortlessly with an intuitive AI copilot.
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <Link href="/signup" className="btn-primary" style={{ fontSize: 16, padding: '14px 36px' }}>Start Creating Free</Link>
+            <Link href="/studio" className="btn-secondary" style={{ fontSize: 16, padding: '14px 36px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="material-symbols-rounded" style={{ fontSize: 20 }}>play_circle</span>
+              Open Studio
+            </Link>
+          </div>
 
         {/* Hero visual */}
         <div className="relative mt-20 mx-auto" style={{ maxWidth: 900 }}>
@@ -142,66 +143,72 @@ export default function LandingPage() {
           </div>
           {/* Glow orbs */}
           <div style={{
-            position: 'absolute', top: -60, left: -60, width: 200, height: 200,
-            borderRadius: '50%', background: 'radial-gradient(circle, rgba(139,92,246,0.2) 0%, transparent 70%)',
+            position: 'absolute', top: -60, left: -60, width: 220, height: 220,
+            borderRadius: '50%', background: 'radial-gradient(circle, rgba(139,92,246,0.22) 0%, transparent 70%)',
             pointerEvents: 'none'
           }} />
           <div style={{
-            position: 'absolute', bottom: -40, right: -40, width: 160, height: 160,
-            borderRadius: '50%', background: 'radial-gradient(circle, rgba(20,184,166,0.15) 0%, transparent 70%)',
+            position: 'absolute', bottom: -40, right: -40, width: 180, height: 180,
+            borderRadius: '50%', background: 'radial-gradient(circle, rgba(20,184,166,0.18) 0%, transparent 70%)',
             pointerEvents: 'none'
           }} />
         </div>
+        </div> {/* page-container */}
       </section>
 
       {/* Features */}
-      <section className="max-w-7xl mx-auto px-6 py-20">
-        <div className="text-center mb-16">
-          <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 'clamp(28px, 4vw, 48px)', fontWeight: 700, marginBottom: 16 }}>
-            Unleash Your <span className="gradient-text">Musical Creativity</span>
-          </h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 17, maxWidth: 520, margin: '0 auto' }}>
-            Discover the powerful tools that make Melodica the ultimate platform for musicians, producers, and creators.
-          </p>
-        </div>
-        <div className="grid md:grid-cols-3 gap-6">
-          {features.map((f) => (
-            <div key={f.title} className="glass-card card-hover p-8" style={{ cursor: 'default' }}>
-              <div style={{
-                width: 56, height: 56, borderRadius: 14,
-                background: `${f.color}22`,
-                border: `1px solid ${f.color}44`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                marginBottom: 20
-              }}>
-                <span className="material-symbols-rounded" style={{ fontSize: 28, color: f.color }}>{f.icon}</span>
+      <section style={{ paddingTop: 80, paddingBottom: 80 }}>
+        <div className="page-container">
+          <div style={{ textAlign: 'center', marginBottom: 56 }}>
+            <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 'clamp(28px, 4vw, 48px)', fontWeight: 700, marginBottom: 16 }}>
+              Unleash Your <span className="gradient-text">Musical Creativity</span>
+            </h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 17, maxWidth: 520, margin: '0 auto' }}>
+              Discover the powerful tools that make Melodica the ultimate platform for musicians, producers, and creators.
+            </p>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24 }}>
+            {features.map((f) => (
+              <div key={f.title} className="glass-card card-hover" style={{ padding: '32px', cursor: 'default' }}>
+                <div style={{
+                  width: 56, height: 56, borderRadius: 14,
+                  background: `${f.color}22`,
+                  border: `1px solid ${f.color}44`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  marginBottom: 20
+                }}>
+                  <span className="material-symbols-rounded" style={{ fontSize: 28, color: f.color }}>{f.icon}</span>
+                </div>
+                <h3 style={{ fontSize: 19, fontWeight: 700, marginBottom: 10, color: 'var(--text-primary)' }}>{f.title}</h3>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7 }}>{f.desc}</p>
               </div>
-              <h3 style={{ fontSize: 19, fontWeight: 700, marginBottom: 10, color: 'var(--text-primary)' }}>{f.title}</h3>
-              <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7 }}>{f.desc}</p>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </section>
 
       {/* CTA */}
-      <section className="max-w-7xl mx-auto px-6 py-20">
-        <div className="glass-card p-16 text-center" style={{
-          background: 'linear-gradient(135deg, rgba(139,92,246,0.12) 0%, rgba(20,184,166,0.08) 100%)',
-          border: '1px solid var(--border-light)'
-        }}>
-          <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 'clamp(28px, 4vw, 44px)', fontWeight: 700, marginBottom: 16 }}>
-            Ready to Compose Your <span className="gradient-text">Masterpiece?</span>
-          </h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 17, marginBottom: 36 }}>
-            Join thousands of musicians, producers, and creators already using Melodica to elevate their sound.
-          </p>
-          <Link href="/signup" className="btn-primary" style={{ fontSize: 16, padding: '14px 44px' }}>Get Started – It's Free</Link>
+      <section style={{ paddingBottom: 80 }}>
+        <div className="page-container">
+          <div className="glass-card" style={{
+            padding: 'clamp(40px, 6vw, 80px)', textAlign: 'center',
+            background: 'linear-gradient(135deg, rgba(139,92,246,0.12) 0%, rgba(20,184,166,0.08) 100%)',
+            border: '1px solid var(--border-light)'
+          }}>
+            <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 'clamp(26px, 4vw, 44px)', fontWeight: 700, marginBottom: 16 }}>
+              Ready to Compose Your <span className="gradient-text">Masterpiece?</span>
+            </h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 17, marginBottom: 36, maxWidth: 560, margin: '0 auto 36px' }}>
+              Join thousands of musicians, producers, and creators already using Melodica to elevate their sound.
+            </p>
+            <Link href="/signup" className="btn-primary" style={{ fontSize: 16, padding: '14px 44px' }}>Get Started – It's Free</Link>
+          </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer style={{ borderTop: '1px solid var(--border)', padding: '32px 24px' }}>
-        <div className="max-w-7xl mx-auto flex items-center justify-between flex-wrap gap-4">
+      <footer style={{ borderTop: '1px solid var(--border)', padding: '28px 0' }}>
+        <div className="page-container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
           <div className="flex items-center gap-2">
             <span className="material-symbols-rounded" style={{ color: 'var(--accent-purple)', fontSize: 22 }}>piano</span>
             <span style={{ fontWeight: 700, fontSize: 16 }}>Melodica</span>
