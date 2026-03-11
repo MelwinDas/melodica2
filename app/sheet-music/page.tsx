@@ -30,11 +30,8 @@ function notesToXml(notes: NoteEntry[]): string {
 
 export default function SheetMusicPage() {
   const [zoom, setZoom] = useState(1.0);
-  const [notes, setNotes] = useState<NoteEntry[]>([
-    { pitch: 'C4', duration: 'q' }, { pitch: 'E4', duration: 'q' },
-    { pitch: 'G4', duration: 'q' }, { pitch: 'B4', duration: 'q' },
-    { pitch: 'D5', duration: 'q' }, { pitch: 'F5', duration: 'q' },
-  ]);
+  // Start empty — content is loaded from localStorage on mount (no placeholder flash)
+  const [notes, setNotes] = useState<NoteEntry[]>([]);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [uploadedName, setUploadedName] = useState<string | null>(null);
@@ -48,38 +45,55 @@ export default function SheetMusicPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const synthRef = useRef<import('tone').PolySynth | null>(null);
 
-  // Generate XML whenever notes change
+  // Generate XML whenever notes change (for manual note editor only)
   useEffect(() => {
-    setMusicXml(notesToXml(notes));
-  }, [notes]);
+    if (notes.length > 0 && !musicXml) {
+      setMusicXml(notesToXml(notes));
+    }
+  }, [notes, musicXml]);
 
-  // Load from localStorage on mount: prefer raw MIDI base64 (from studio upload), fall back to piano notes
+  // On mount: load MIDI from localStorage
+  // Priority order:
+  //   1. melodica_piano_notes (fresh piano recording — overrides stale MIDI)
+  //   2. melodica_midi_base64 (MIDI file from studio upload/navigation)
   useEffect(() => {
+    const pianoNotes = localStorage.getItem('melodica_piano_notes');
+    if (pianoNotes) {
+      // Piano recording takes priority — clear stale studio MIDI
+      localStorage.removeItem('melodica_piano_notes');
+      localStorage.removeItem('melodica_midi_base64');
+      localStorage.removeItem('melodica_midi_name');
+      (async () => {
+        try {
+          const parsed = JSON.parse(pianoNotes) as NoteEntry[];
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            // Convert NoteEntry[] to a proper MIDI file so midiBufferToMusicXml can parse it accurately
+            const { Midi: ToneMidi } = await import('@tonejs/midi');
+            const midi = new ToneMidi();
+            const track = midi.addTrack();
+            const STEP: Record<string, number> = { C:0,'C#':1,D:2,'D#':3,E:4,F:5,'F#':6,G:7,'G#':8,A:9,'A#':10,B:11 };
+            parsed.forEach((n, i) => {
+              const m = n.pitch.match(/^([A-G]#?)(\d)$/);
+              const midiNum = m ? (parseInt(m[2]) + 1) * 12 + (STEP[m[1]] ?? 0) : 60;
+              track.addNote({ midi: midiNum, time: i * 0.4, duration: 0.35, velocity: 0.8 });
+            });
+            const file = new File([new Uint8Array(midi.toArray())], 'Piano Recording.mid', { type: 'audio/midi' });
+            handleMidiUpload(file);
+          }
+        } catch { /* ignore */ }
+      })();
+      return;
+    }
     const midiBase64 = localStorage.getItem('melodica_midi_base64');
     const midiName   = localStorage.getItem('melodica_midi_name');
     if (midiBase64) {
       try {
-        // Decode base64 to Uint8Array and create a File
         const bin = atob(midiBase64);
         const bytes = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
         const file = new File([bytes], midiName ?? 'recording.mid', { type: 'audio/midi' });
         handleMidiUpload(file);
-        // Keep the key so refreshing the page works but navigate-away clears it
       } catch { /* ignore */ }
-      return; // don't also load piano notes
-    }
-    const stored = localStorage.getItem('melodica_piano_notes');
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as NoteEntry[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setNotes(parsed);
-          setUploadedName('Piano Recording');
-          setIsDirty(false);
-        }
-      } catch { /* ignore */ }
-      localStorage.removeItem('melodica_piano_notes');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

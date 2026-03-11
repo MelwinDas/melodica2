@@ -99,21 +99,13 @@ export default function StudioPage() {
   const pianoRollCanvasRef = useRef<HTMLCanvasElement>(null);
   const [wsReady, setWsReady] = useState(false);
 
-  // midi-player-js instance for MIDI playback
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const midiPlayerRef = useRef<any>(null);
-  // soundfont-player instrument (loaded once, reused)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sfInstrumentRef = useRef<any>(null);
-  // AudioContext for soundfont-player
-  const audioCtxRef = useRef<AudioContext | null>(null);
 
   // Raw MIDI bytes — single source of truth for export + playback
   const midiRawBlobRef = useRef<Blob | null>(null);
   const midiFileNameRef = useRef<string>('melodica_export.mid');
 
-  // MIDI upload / notation
-  const [uploadedNotes, setUploadedNotes] = useState<NoteEntry[]>([]);
+  // MIDI upload
+  const [midiMeta, setMidiMeta] = useState<{ tracks: number; notes: number; duration: number; bpm: number } | null>(null);
   const [uploadedFile, setUploadedFile] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -152,57 +144,118 @@ export default function StudioPage() {
       .catch(() => setBackendAlive(false));
   }, []);
 
-  // Load piano notes from localStorage (set by piano page "Open in Studio")
+  // Load piano recording from localStorage (set by piano page "Open in Studio")
+  // We rebuild a temporary MIDI file from the NoteEntry[] and call parseMidiFile
+  // so that the raw bytes become the source of truth here too
   useEffect(() => {
     const stored = localStorage.getItem('melodica_piano_notes');
     if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as NoteEntry[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setUploadedNotes(parsed);
-          setUploadedFile('Piano Recording');
-          setTab('file-upload'); // switch to upload tab to show the notes
+      (async () => {
+        try {
+          const parsed = JSON.parse(stored) as NoteEntry[];
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            // Build a proper MIDI blob from the NoteEntry[] piano recording
+            const { Midi: ToneMidi } = await import('@tonejs/midi');
+            const midi = new ToneMidi();
+            const track = midi.addTrack();
+            const STEP: Record<string, number> = { C:0,'C#':1,D:2,'D#':3,E:4,F:5,'F#':6,G:7,'G#':8,A:9,'A#':10,B:11 };
+            parsed.forEach((n, i) => {
+              const m = n.pitch.match(/^([A-G]#?)(\d)$/);
+              const midiNum = m ? (parseInt(m[2]) + 1) * 12 + (STEP[m[1]] ?? 0) : 60;
+              track.addNote({ midi: midiNum, time: i * 0.4, duration: 0.35, velocity: 0.8 });
+            });
+            const file = new File([new Uint8Array(midi.toArray())], 'Piano Recording.mid', { type: 'audio/midi' });
+            await parseMidiFile(file);
+            setTab('file-upload');
+          }
+        } catch { /* ignore */ }
+        localStorage.removeItem('melodica_piano_notes');
+      })();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Audio playback using Tone.js directly (no CDN) ───────────────────────
+  // Schedules all notes from the raw MIDI file using Tone.Transport
+  const tonePartRef = useRef<import('tone').Part | null>(null);
+  const toneSynthRef = useRef<import('tone').PolySynth | null>(null);
+
+  const scheduleAndPlay = useCallback(async () => {
+    if (!midiRawBlobRef.current) return;
+    try {
+      const Tone = await import('tone');
+      await Tone.start(); // must be called inside user gesture
+
+      // Stop any previous playback
+      Tone.Transport.stop();
+      Tone.Transport.cancel();
+      if (tonePartRef.current) { tonePartRef.current.dispose(); tonePartRef.current = null; }
+      if (toneSynthRef.current) { toneSynthRef.current.dispose(); toneSynthRef.current = null; }
+
+      // Parse raw MIDI for accurate note data
+      const buf = await midiRawBlobRef.current.arrayBuffer();
+      const midiData = new Midi(buf);
+
+      // Create a PolySynth with a piano-like tone
+      const synth = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: 'triangle' },
+        envelope: { attack: 0.02, decay: 0.1, sustain: 0.5, release: 0.8 },
+      }).toDestination();
+      synth.set({ volume: -6 });
+      toneSynthRef.current = synth;
+
+      // Schedule every note from every track
+      const events: { time: number; note: string; dur: number }[] = [];
+      for (const track of midiData.tracks) {
+        for (const note of track.notes) {
+          events.push({ time: note.time, note: note.name, dur: note.duration });
         }
-      } catch { /* ignore */ }
-      localStorage.removeItem('melodica_piano_notes');
+      }
+
+      const part = new Tone.Part((time, ev) => {
+        synth.triggerAttackRelease(ev.note, ev.dur, time);
+      }, events);
+      tonePartRef.current = part;
+
+      // When the last note ends, stop
+      const endTime = events.reduce((max, e) => Math.max(max, e.time + e.dur), 0);
+      Tone.Transport.scheduleOnce(() => {
+        setIsPlaying(false);
+        Tone.Transport.stop();
+      }, endTime + 0.2);
+
+      part.start(0);
+      Tone.Transport.start();
+      setIsPlaying(true);
+    } catch (e) {
+      console.error('Playback error', e);
     }
   }, []);
 
-
-  // No Wavesurfer init needed — piano-roll canvas is drawn on demand
+  const stopTone = useCallback(async () => {
+    try {
+      const Tone = await import('tone');
+      Tone.Transport.stop();
+      Tone.Transport.cancel();
+      if (tonePartRef.current) { tonePartRef.current.dispose(); tonePartRef.current = null; }
+      if (toneSynthRef.current) { toneSynthRef.current.dispose(); toneSynthRef.current = null; }
+    } catch { /* ignore */ }
+    setIsPlaying(false);
+  }, []);
 
   // Transport controls
   const handlePlay = useCallback(async () => {
-    // If MidiPlayer is loaded, use it for playback
-    if (midiPlayerRef.current) {
-      const player = midiPlayerRef.current;
-      if (isPlaying) {
-        player.pause();
-        setIsPlaying(false);
-      } else {
-        player.play();
-        setIsPlaying(true);
-      }
+    if (isPlaying) {
+      await stopTone();
       return;
     }
-    // Fallback: play via Tone.js PolySynth
-    if (uploadedNotes.length === 0) return;
-    const Tone = await import('tone');
-    await Tone.start();
-    const synth = new Tone.PolySynth().toDestination();
-    uploadedNotes.forEach((n, i) => {
-      synth.triggerAttackRelease(n.pitch, '8n', Tone.now() + i * 0.4);
-    });
-    setIsPlaying(true);
-    setTimeout(() => { synth.dispose(); setIsPlaying(false); }, uploadedNotes.length * 400 + 500);
-  }, [isPlaying, uploadedNotes]);
+    // Use Tone.js direct scheduling (no CDN, no blocking)
+    await scheduleAndPlay();
+  }, [isPlaying, scheduleAndPlay, stopTone]);
 
-  const handleStop = useCallback(() => {
-    if (midiPlayerRef.current) {
-      midiPlayerRef.current.stop();
-    }
-    setIsPlaying(false);
-  }, []);
+  const handleStop = useCallback(async () => {
+    await stopTone();
+  }, [stopTone]);
 
   const handleRecord = useCallback(() => {
     setIsRecording(r => !r);
@@ -271,83 +324,47 @@ export default function StudioPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load soundfont-player instrument (acoustic_grand_piano)
-  const loadSoundfont = useCallback(async () => {
-    if (sfInstrumentRef.current) return sfInstrumentRef.current;
-    const AudioCtx = window.AudioContext || (window as never as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!audioCtxRef.current) audioCtxRef.current = new AudioCtx();
-    const ac = audioCtxRef.current;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const Soundfont = (await import('soundfont-player')) as any;
-    const instrument = await Soundfont.default.instrument(ac, 'acoustic_grand_piano', {
-      soundfont: 'MusyngKite',
-      format: 'mp3',
-      nameToUrl: (name: string, sf: string, fmt: string) =>
-        `https://cdn.jsdelivr.net/gh/gleitz/midi-js-soundfonts@gh-pages/${sf}/${name}-${fmt}.js`,
-    });
-    sfInstrumentRef.current = instrument;
-    return instrument;
+  // initMidiPlayer: kept for MIDI position tracking only, audio is handled by Tone.js scheduleAndPlay
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const initMidiPlayer = useCallback(async (_blob: Blob) => {
+    // Tone.js handles all audio scheduling — this is a no-op intentionally
+    // Keep midiPlayerRef null since we use scheduleAndPlay instead
   }, []);
 
-  // Init midi-player-js with a MIDI blob — uses soundfont-player for audio
-  const initMidiPlayer = useCallback(async (blob: Blob) => {
-    const arrayBuf = await blob.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuf);
-    // Pre-load instrument so first note plays without delay
-    loadSoundfont().catch(() => {/* pre-load best-effort */});
-
-    const { Player } = (await import('midi-player-js')) as { Player: new (cb: (event: unknown) => void) => unknown };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const player: any = new Player(async (event: any) => {
-      if (event.name === 'Note on' && event.velocity > 0) {
-        try {
-          const instrument = await loadSoundfont();
-          if (audioCtxRef.current?.state === 'suspended') {
-            await audioCtxRef.current.resume();
-          }
-          instrument.play(String(event.noteNumber), audioCtxRef.current!.currentTime, {
-            gain: event.velocity / 127,
-            duration: 0.5,
-          });
-        } catch { /* ignore */ }
-      }
-      if (event.name === 'End of file') {
-        setIsPlaying(false);
-      }
-    });
-    player.loadArrayBuffer(bytes.buffer);
-    midiPlayerRef.current = player;
-  }, [loadSoundfont]);
-
-  // MIDI file parsing via @tonejs/midi
+  // MIDI file parsing — NO NoteEntry conversion. Raw bytes are the source of truth.
   const parseMidiFile = useCallback(async (file: File) => {
     setUploadedFile(file.name);
     midiFileNameRef.current = file.name;
     setAnalyzing(true);
     try {
       const buf = await file.arrayBuffer();
-      // Store raw bytes as source of truth
+      // Store raw bytes — never convert to simplified format
       midiRawBlobRef.current = new Blob([buf], { type: 'audio/midi' });
 
+      // Parse for metadata display + piano-roll drawing only
       const midi = new Midi(buf);
-      const notes: NoteEntry[] = [];
-      for (const track of midi.tracks) {
-        for (const note of track.notes) {
-          notes.push({ pitch: normalisePitch(note.name), duration: 'q' });
-          if (notes.length >= 48) break;
-        }
-        if (notes.length >= 48) break;
-      }
-      setUploadedNotes(notes);
+      let totalNotes = 0;
+      for (const track of midi.tracks) totalNotes += track.notes.length;
+      const lastNote = midi.tracks.flatMap(t => t.notes).reduce(
+        (acc, n) => Math.max(acc, n.time + n.duration), 0
+      );
+      const bpm = midi.header.tempos[0]?.bpm ?? 120;
+      setMidiMeta({ tracks: midi.tracks.filter(t => t.notes.length > 0).length, notes: totalNotes, duration: lastNote, bpm });
 
-      // Store raw bytes as base64 in localStorage → sheet-music page reads same file
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-      localStorage.setItem('melodica_midi_base64', base64);
+      // Store as base64 in localStorage → sheet-music page reads exact same bytes
+      const bytes = new Uint8Array(buf);
+      // Use a chunked encoder to avoid call-stack overflow on large files
+      const CHUNK = 8192;
+      let b64 = '';
+      for (let i = 0; i < bytes.length; i += CHUNK) {
+        b64 += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+      }
+      localStorage.setItem('melodica_midi_base64', btoa(b64));
       localStorage.setItem('melodica_midi_name', file.name);
 
-      // Draw piano-roll from the parsed MIDI
+      // Draw piano-roll directly from parsed MIDI data
       drawPianoRoll(midi);
-      // Init MidiPlayer for playback
+      // Init midi-player-js from raw bytes for playback
       await initMidiPlayer(midiRawBlobRef.current!);
     } catch (e) {
       console.error('MIDI parse error', e);
@@ -426,8 +443,10 @@ export default function StudioPage() {
     try {
       // Determine seed: piano recording takes priority over manual file
       let resolvedSeedFile: File | null = seedFile;
-      if (usePianoAsSeed && uploadedNotes.length > 0) {
-        resolvedSeedFile = await notesToMidiFile(uploadedNotes);
+      // If usePianoAsSeed is on AND we have a raw blob from piano recording, use it as seed
+      if (usePianoAsSeed && midiRawBlobRef.current && uploadedFile === 'Piano Recording.mid') {
+        const buf = await midiRawBlobRef.current.arrayBuffer();
+        resolvedSeedFile = new File([buf], 'piano_seed.mid', { type: 'audio/midi' });
       }
 
       // Choose endpoint: multipart when seed file present, JSON otherwise
@@ -451,20 +470,24 @@ export default function StudioPage() {
       if (!res.ok) throw new Error(await res.text());
       setGenProgress(100);
       const blob = await res.blob();
-
-      // Parse the returned MIDI blob into notation
-      const notes = await parseMidiBlob(blob);
-      setGeneratedNotes(notes);
+      // Store the exact response blob IMMEDIATELY — before any async ops that might invalidate it
       setGeneratedMidiBlob(blob);
-      // Load notes into main track view
-      if (notes.length > 0) setUploadedNotes(notes);
 
-      // Auto-download as .mid
+      // Name it before use
       const genName = `melodica_gen_${GENRES[genre].label.toLowerCase()}.mid`;
-      const url = URL.createObjectURL(blob);
+
+      // Auto-download the generated .mid immediately
+      const dlBlob = blob.slice(0); // snapshot to avoid revocation issues
+      const url = URL.createObjectURL(dlBlob);
       const a = document.createElement('a');
       a.href = url; a.download = genName; a.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 5000); // revoke after 5s
+
+      // Load generated MIDI into piano roll + midiRawBlobRef for future export
+      if (blob && blob.size > 0) {
+        const genFile = new File([blob.slice(0)], genName, { type: 'audio/midi' });
+        await parseMidiFile(genFile);
+      }
     } catch (e: unknown) {
       clearInterval(interval);
       setGenError(e instanceof Error ? e.message : 'Generation failed');
@@ -490,21 +513,10 @@ export default function StudioPage() {
           blob = generatedMidiBlob;
           filename = `melodica_gen_${GENRES[genre].label.toLowerCase()}.mid`;
         } else {
-          // Nothing loaded — build placeholder from whatever notes we have
-          const midi = new Midi();
-          midi.header.setTempo(bpm);
-          const track = midi.addTrack();
-          const STEP_MIDI: Record<string, number> = {
-            'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5,
-            'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11,
-          };
-          uploadedNotes.forEach((n, i) => {
-            const m = n.pitch.match(/^([A-G]#?)(\d)$/);
-            const midiNum = m ? (parseInt(m[2]) + 1) * 12 + (STEP_MIDI[m[1]] ?? 0) : 60;
-            track.addNote({ midi: midiNum, time: i * 0.5, duration: 0.4, velocity: 0.8 });
-          });
-          blob = new Blob([new Uint8Array(midi.toArray())], { type: 'audio/midi' });
-          filename = 'melodica_export.mid';
+          // Nothing else loaded — nothing to export
+          setExporting(false);
+          alert('No MIDI file loaded. Upload or generate a file first.');
+          return;
         }
       } else {
         blob = await recordAudioBlob(3000);
@@ -698,14 +710,14 @@ export default function StudioPage() {
                 </div>
 
                 {/* ── Piano Recording as Seed ── */}
-                {uploadedNotes.length > 0 && uploadedFile === 'Piano Recording' && (
+                {uploadedFile === 'Piano Recording.mid' && midiMeta && (
                   <div style={{ marginBottom: 16, background: 'rgba(139,92,246,0.06)', border: `1px solid ${usePianoAsSeed ? 'rgba(139,92,246,0.4)' : 'var(--border)'}`, borderRadius: 10, padding: '12px 14px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span className="material-symbols-rounded" style={{ fontSize: 18, color: 'var(--accent-purple)' }}>piano</span>
                         <div>
                           <p style={{ fontSize: 13, fontWeight: 700, color: usePianoAsSeed ? 'var(--accent-purple-light)' : 'var(--text-primary)' }}>Piano Recording</p>
-                          <p style={{ fontSize: 10, color: 'var(--text-muted)' }}>{uploadedNotes.length} recorded notes</p>
+                          <p style={{ fontSize: 10, color: 'var(--text-muted)' }}>{midiMeta.notes} recorded notes</p>
                         </div>
                       </div>
                       {/* Toggle switch */}
@@ -863,27 +875,40 @@ export default function StudioPage() {
                   )}
                 </div>
 
-                {uploadedNotes.length > 0 && (
+                {/* MIDI info card shown after upload */}
+                {midiMeta && uploadedFile && (
                   <div style={{ background: 'var(--bg-panel)', borderRadius: 12, padding: '16px', border: '1px solid var(--border)' }}>
-                    <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Parsed Notes</p>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {uploadedNotes.slice(0, 24).map((n, i) => (
-                        <span key={i} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-light)', borderRadius: 6, padding: '3px 9px', fontSize: 11, fontFamily: 'monospace', color: 'var(--text-primary)' }}>{n.pitch}</span>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>MIDI Info</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+                      {[
+                        { label: 'Tracks', value: midiMeta.tracks, icon: 'queue_music' },
+                        { label: 'Notes',  value: midiMeta.notes,  icon: 'music_note' },
+                        { label: 'Duration', value: `${midiMeta.duration.toFixed(1)}s`, icon: 'timer' },
+                        { label: 'Tempo',    value: `${Math.round(midiMeta.bpm)} BPM`, icon: 'speed' },
+                      ].map(s => (
+                        <div key={s.label} style={{ background: 'var(--bg-card)', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className="material-symbols-rounded" style={{ fontSize: 16, color: 'var(--accent-purple-light)' }}>{s.icon}</span>
+                          <div>
+                            <p style={{ fontSize: 16, fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", lineHeight: 1 }}>{s.value}</p>
+                            <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{s.label}</p>
+                          </div>
+                        </div>
                       ))}
-                      {uploadedNotes.length > 24 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>+{uploadedNotes.length - 24} more</span>}
                     </div>
                     <button
                       onClick={async () => {
-                        // Ensure the raw MIDI is in localStorage before navigating
                         if (midiRawBlobRef.current) {
                           const buf = await midiRawBlobRef.current.arrayBuffer();
-                          const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-                          localStorage.setItem('melodica_midi_base64', base64);
+                          const bytes = new Uint8Array(buf);
+                          const CHUNK = 8192; let b64 = '';
+                          for (let i = 0; i < bytes.length; i += CHUNK)
+                            b64 += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+                          localStorage.setItem('melodica_midi_base64', btoa(b64));
                           localStorage.setItem('melodica_midi_name', midiFileNameRef.current);
                         }
                         window.location.href = '/sheet-music';
                       }}
-                      className="btn-teal" style={{ display: 'block', width: '100%', textAlign: 'center', marginTop: 14, padding: '11px', fontSize: 13, border: 'none', cursor: 'pointer', borderRadius: 10 }}
+                      className="btn-teal" style={{ display: 'block', width: '100%', textAlign: 'center', padding: '11px', fontSize: 13, border: 'none', cursor: 'pointer', borderRadius: 10 }}
                     >View Full Sheet Music</button>
                   </div>
                 )}
