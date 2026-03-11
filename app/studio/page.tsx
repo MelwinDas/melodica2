@@ -95,10 +95,17 @@ export default function StudioPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [bpm, setBpm] = useState(128);
 
-  // Wavesurfer
-  const waveContainerRef = useRef<HTMLDivElement>(null);
-  const wavesurferRef = useRef<import('wavesurfer.js').default | null>(null);
+  // Piano roll canvas (replaces WaveSurfer for MIDI visualization)
+  const pianoRollCanvasRef = useRef<HTMLCanvasElement>(null);
   const [wsReady, setWsReady] = useState(false);
+
+  // midi-player-js instance for MIDI playback
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const midiPlayerRef = useRef<any>(null);
+
+  // Raw MIDI bytes — single source of truth for export + playback
+  const midiRawBlobRef = useRef<Blob | null>(null);
+  const midiFileNameRef = useRef<string>('melodica_export.mid');
 
   // MIDI upload / notation
   const [uploadedNotes, setUploadedNotes] = useState<NoteEntry[]>([]);
@@ -157,39 +164,23 @@ export default function StudioPage() {
   }, []);
 
 
-  // Initialize Wavesurfer (browser-only)
-  useEffect(() => {
-    if (!waveContainerRef.current) return;
-    let ws: import('wavesurfer.js').default;
-    import('wavesurfer.js').then(({ default: WaveSurfer }) => {
-      ws = WaveSurfer.create({
-        container: waveContainerRef.current!,
-        waveColor: '#8b5cf6',
-        progressColor: '#14b8a6',
-        height: 68,
-        barWidth: 2,
-        barGap: 1,
-        barRadius: 2,
-        cursorColor: '#a78bfa',
-        normalize: true,
-        backend: 'WebAudio',
-      });
-      ws.on('ready', () => setWsReady(true));
-      wavesurferRef.current = ws;
-    });
-    return () => { ws?.destroy(); };
-  }, []);
+  // No Wavesurfer init needed — piano-roll canvas is drawn on demand
 
   // Transport controls
   const handlePlay = useCallback(async () => {
-    const ws = wavesurferRef.current;
-    // If wavesurfer has an audio file loaded, use it
-    if (ws && wsReady) {
-      if (isPlaying) { ws.pause(); setIsPlaying(false); }
-      else { ws.play(); setIsPlaying(true); }
+    // If MidiPlayer is loaded, use it for playback
+    if (midiPlayerRef.current) {
+      const player = midiPlayerRef.current;
+      if (isPlaying) {
+        player.pause();
+        setIsPlaying(false);
+      } else {
+        player.play();
+        setIsPlaying(true);
+      }
       return;
     }
-    // Fallback: play MIDI notes via Tone.js synth
+    // Fallback: play via Tone.js PolySynth
     if (uploadedNotes.length === 0) return;
     const Tone = await import('tone');
     await Tone.start();
@@ -199,12 +190,12 @@ export default function StudioPage() {
     });
     setIsPlaying(true);
     setTimeout(() => { synth.dispose(); setIsPlaying(false); }, uploadedNotes.length * 400 + 500);
-  }, [isPlaying, wsReady, uploadedNotes]);
+  }, [isPlaying, uploadedNotes]);
 
   const handleStop = useCallback(() => {
-    const ws = wavesurferRef.current;
-    if (!ws) return;
-    ws.stop();
+    if (midiPlayerRef.current) {
+      midiPlayerRef.current.stop();
+    }
     setIsPlaying(false);
   }, []);
 
@@ -222,12 +213,95 @@ export default function StudioPage() {
     return name;
   };
 
+  // Draw piano-roll on canvas from midi-file data
+  const drawPianoRoll = useCallback((midi: import('@tonejs/midi').Midi) => {
+    const canvas = pianoRollCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = canvas.offsetWidth || 800;
+    const H = 90;
+    canvas.width = W; canvas.height = H;
+
+    // Collect all notes
+    const allNotes: { midi: number; time: number; dur: number }[] = [];
+    for (const track of midi.tracks) {
+      for (const note of track.notes) {
+        allNotes.push({ midi: note.midi, time: note.time, dur: note.duration });
+      }
+    }
+    if (allNotes.length === 0) return;
+
+    const totalTime = Math.max(...allNotes.map(n => n.time + n.dur));
+    const minPitch = Math.min(...allNotes.map(n => n.midi)) - 2;
+    const maxPitch = Math.max(...allNotes.map(n => n.midi)) + 2;
+    const pitchRange = Math.max(maxPitch - minPitch, 12);
+
+    // Background
+    ctx.fillStyle = '#1a1828';
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid lines
+    ctx.strokeStyle = 'rgba(139,92,246,0.08)';
+    ctx.lineWidth = 1;
+    for (let t = 0; t <= totalTime; t += 1) {
+      const x = (t / totalTime) * W;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+
+    // Notes
+    for (const note of allNotes) {
+      const x = (note.time / totalTime) * W;
+      const w = Math.max((note.dur / totalTime) * W - 1, 2);
+      const y = H - ((note.midi - minPitch) / pitchRange) * H;
+      const noteH = Math.max(H / pitchRange - 1, 3);
+      const isBlack = [1,3,6,8,10].includes(note.midi % 12);
+      ctx.fillStyle = isBlack ? '#a78bfa' : '#14b8a6';
+      ctx.beginPath();
+      ctx.roundRect(x, y - noteH, w, noteH, 2);
+      ctx.fill();
+    }
+
+    setWsReady(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Init midi-player-js with a MIDI blob
+  const initMidiPlayer = useCallback(async (blob: Blob) => {
+    const arrayBuf = await blob.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuf);
+    // Dynamically import midi-player-js
+    const { Player } = (await import('midi-player-js')) as { Player: new (cb: (event: unknown) => void) => unknown };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const player: any = new Player(async (event: any) => {
+      if (event.name === 'Note on' && event.velocity > 0) {
+        try {
+          const Tone = await import('tone');
+          await Tone.start();
+          const freq = Tone.Frequency(event.noteNumber, 'midi').toNote();
+          const synth = new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.01, decay: 0.05, sustain: 0.4, release: 0.4 } }).toDestination();
+          synth.triggerAttackRelease(freq, '16n');
+          setTimeout(() => synth.dispose(), 500);
+        } catch { /* ignore */ }
+      }
+      if (event.name === 'End of file') {
+        setIsPlaying(false);
+      }
+    });
+    player.loadArrayBuffer(bytes.buffer);
+    midiPlayerRef.current = player;
+  }, []);
+
   // MIDI file parsing via @tonejs/midi
   const parseMidiFile = useCallback(async (file: File) => {
     setUploadedFile(file.name);
+    midiFileNameRef.current = file.name;
     setAnalyzing(true);
     try {
       const buf = await file.arrayBuffer();
+      // Store raw bytes as source of truth
+      midiRawBlobRef.current = new Blob([buf], { type: 'audio/midi' });
+
       const midi = new Midi(buf);
       const notes: NoteEntry[] = [];
       for (const track of midi.tracks) {
@@ -238,24 +312,24 @@ export default function StudioPage() {
         if (notes.length >= 48) break;
       }
       setUploadedNotes(notes);
+
+      // Draw piano-roll from the parsed MIDI
+      drawPianoRoll(midi);
+      // Init MidiPlayer for playback
+      await initMidiPlayer(midiRawBlobRef.current);
     } catch (e) {
       console.error('MIDI parse error', e);
     } finally {
       setAnalyzing(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [drawPianoRoll, initMidiPlayer]);
 
   const handleFileDrop = (file: File) => {
     if (file.name.endsWith('.mid') || file.name.endsWith('.midi')) {
       parseMidiFile(file);
-    } else if (file.name.endsWith('.mp3') || file.name.endsWith('.wav')) {
-      setUploadedFile(file.name);
-      setAnalyzing(true);
-      const url = URL.createObjectURL(file);
-      wavesurferRef.current?.load(url);
-      setTimeout(() => setAnalyzing(false), 1500);
     }
+    // Audio files (mp3/wav) are not supported as waveform input — show message
   };
 
   // Helper: convert NoteEntry[] → MIDI File object (for sending as seed)
@@ -376,43 +450,45 @@ export default function StudioPage() {
       let filename: string;
 
       if (exportFormat === 'midi') {
-        // Build a minimal MIDI from uploadedNotes or a placeholder
-        const midi = new Midi();
-        midi.header.setTempo(bpm);
-        const track = midi.addTrack();
-        const sourceNotes = uploadedNotes.length > 0 ? uploadedNotes : [{ pitch: 'C4', duration: 'q' }];
-        sourceNotes.forEach((n, i) => {
-          track.addNote({ midi: 60 + i, time: i * 0.5, duration: 0.4, velocity: 0.8 });
-        });
-        const midiBytes = midi.toArray();
-        blob = new Blob([new Uint8Array(midiBytes)], { type: 'audio/midi' });
-        filename = 'melodica_export.mid';
+        // ALWAYS use the raw source blob if available — never reconstruct
+        if (midiRawBlobRef.current) {
+          blob = midiRawBlobRef.current;
+          filename = midiFileNameRef.current.replace(/\.(mid|midi)$/i, '_export.mid');
+        } else if (generatedMidiBlob) {
+          blob = generatedMidiBlob;
+          filename = `melodica_gen_${GENRES[genre].label.toLowerCase()}.mid`;
+        } else {
+          // Nothing loaded — build placeholder from whatever notes we have
+          const midi = new Midi();
+          midi.header.setTempo(bpm);
+          const track = midi.addTrack();
+          const STEP_MIDI: Record<string, number> = {
+            'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5,
+            'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11,
+          };
+          uploadedNotes.forEach((n, i) => {
+            const m = n.pitch.match(/^([A-G]#?)(\d)$/);
+            const midiNum = m ? (parseInt(m[2]) + 1) * 12 + (STEP_MIDI[m[1]] ?? 0) : 60;
+            track.addNote({ midi: midiNum, time: i * 0.5, duration: 0.4, velocity: 0.8 });
+          });
+          blob = new Blob([new Uint8Array(midi.toArray())], { type: 'audio/midi' });
+          filename = 'melodica_export.mid';
+        }
       } else {
-        // MP3 export: capture audio via MediaRecorder from the browser AudioContext.
-        // Browsers encode as audio/webm (Opus) — saved as .mp3 (widely playable).
         blob = await recordAudioBlob(3000);
         filename = 'melodica_export.mp3';
       }
 
-      // File System Access API with fallback
-      if ('showSaveFilePicker' in window) {
-        const handle = await (window as Window & { showSaveFilePicker: (opts: object) => Promise<FileSystemFileHandle> })
-          .showSaveFilePicker({
-            suggestedName: filename,
-            types: [{
-              description: exportFormat === 'midi' ? 'MIDI File' : 'MP3 Audio',
-              accept: exportFormat === 'midi' ? { 'audio/midi': ['.mid', '.midi'] } : { 'audio/mpeg': ['.mp3'] },
-            }],
-          });
-        const writable = await handle.createWritable();
-        await writable.write(blob);
-        await writable.close();
-      } else {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = filename; a.click();
-        URL.revokeObjectURL(url);
-      }
+      // Always use anchor download — showSaveFilePicker saves without extension on some browsers
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
       setExportSuccess(true);
     } catch (e: unknown) {
       if (e instanceof Error && e.name !== 'AbortError') console.error(e);
@@ -490,14 +566,20 @@ export default function StudioPage() {
             </Link>
           </div>
 
-          {/* Waveform */}
-          <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', background: 'var(--bg-primary)', flexShrink: 0 }}>
-            <div ref={waveContainerRef} style={{ borderRadius: 8, overflow: 'hidden', background: 'var(--bg-card)', minHeight: 68 }} />
-            {!wsReady && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 68, marginTop: -68, position: 'relative', zIndex: 1 }}>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Load an audio file to see the waveform</p>
-              </div>
-            )}
+          {/* Piano Roll (powered by midi-player-js data) */}
+          <div style={{ padding: '12px 16px 0', borderBottom: '1px solid var(--border)', background: 'var(--bg-primary)', flexShrink: 0 }}>
+            <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', background: '#1a1828', minHeight: 90 }}>
+              <canvas
+                ref={pianoRollCanvasRef}
+                style={{ display: wsReady ? 'block' : 'none', width: '100%', height: 90 }}
+              />
+              {!wsReady && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 90, gap: 8 }}>
+                  <span className="material-symbols-rounded" style={{ fontSize: 18, color: 'var(--text-muted)' }}>piano</span>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Upload a MIDI file to see the piano roll</p>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* MIDI notation preview */}
