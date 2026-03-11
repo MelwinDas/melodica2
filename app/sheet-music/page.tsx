@@ -53,8 +53,22 @@ export default function SheetMusicPage() {
     setMusicXml(notesToXml(notes));
   }, [notes]);
 
-  // Load from localStorage (piano "Full View") on mount
+  // Load from localStorage on mount: prefer raw MIDI base64 (from studio upload), fall back to piano notes
   useEffect(() => {
+    const midiBase64 = localStorage.getItem('melodica_midi_base64');
+    const midiName   = localStorage.getItem('melodica_midi_name');
+    if (midiBase64) {
+      try {
+        // Decode base64 to Uint8Array and create a File
+        const bin = atob(midiBase64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const file = new File([bytes], midiName ?? 'recording.mid', { type: 'audio/midi' });
+        handleMidiUpload(file);
+        // Keep the key so refreshing the page works but navigate-away clears it
+      } catch { /* ignore */ }
+      return; // don't also load piano notes
+    }
     const stored = localStorage.getItem('melodica_piano_notes');
     if (stored) {
       try {
@@ -67,6 +81,7 @@ export default function SheetMusicPage() {
       } catch { /* ignore */ }
       localStorage.removeItem('melodica_piano_notes');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── MIDI upload ─────────────────────────────────────────────────────────

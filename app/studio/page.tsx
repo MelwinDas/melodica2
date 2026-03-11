@@ -102,6 +102,11 @@ export default function StudioPage() {
   // midi-player-js instance for MIDI playback
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const midiPlayerRef = useRef<any>(null);
+  // soundfont-player instrument (loaded once, reused)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sfInstrumentRef = useRef<any>(null);
+  // AudioContext for soundfont-player
+  const audioCtxRef = useRef<AudioContext | null>(null);
 
   // Raw MIDI bytes — single source of truth for export + playback
   const midiRawBlobRef = useRef<Blob | null>(null);
@@ -220,7 +225,7 @@ export default function StudioPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const W = canvas.offsetWidth || 800;
-    const H = 160;
+    const H = canvas.offsetHeight || 400;
     canvas.width = W; canvas.height = H;
 
     // Collect all notes
@@ -266,22 +271,44 @@ export default function StudioPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Init midi-player-js with a MIDI blob
+  // Load soundfont-player instrument (acoustic_grand_piano)
+  const loadSoundfont = useCallback(async () => {
+    if (sfInstrumentRef.current) return sfInstrumentRef.current;
+    const AudioCtx = window.AudioContext || (window as never as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!audioCtxRef.current) audioCtxRef.current = new AudioCtx();
+    const ac = audioCtxRef.current;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const Soundfont = (await import('soundfont-player')) as any;
+    const instrument = await Soundfont.default.instrument(ac, 'acoustic_grand_piano', {
+      soundfont: 'MusyngKite',
+      format: 'mp3',
+      nameToUrl: (name: string, sf: string, fmt: string) =>
+        `https://cdn.jsdelivr.net/gh/gleitz/midi-js-soundfonts@gh-pages/${sf}/${name}-${fmt}.js`,
+    });
+    sfInstrumentRef.current = instrument;
+    return instrument;
+  }, []);
+
+  // Init midi-player-js with a MIDI blob — uses soundfont-player for audio
   const initMidiPlayer = useCallback(async (blob: Blob) => {
     const arrayBuf = await blob.arrayBuffer();
     const bytes = new Uint8Array(arrayBuf);
-    // Dynamically import midi-player-js
+    // Pre-load instrument so first note plays without delay
+    loadSoundfont().catch(() => {/* pre-load best-effort */});
+
     const { Player } = (await import('midi-player-js')) as { Player: new (cb: (event: unknown) => void) => unknown };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const player: any = new Player(async (event: any) => {
       if (event.name === 'Note on' && event.velocity > 0) {
         try {
-          const Tone = await import('tone');
-          await Tone.start();
-          const freq = Tone.Frequency(event.noteNumber, 'midi').toNote();
-          const synth = new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.01, decay: 0.05, sustain: 0.4, release: 0.4 } }).toDestination();
-          synth.triggerAttackRelease(freq, '16n');
-          setTimeout(() => synth.dispose(), 500);
+          const instrument = await loadSoundfont();
+          if (audioCtxRef.current?.state === 'suspended') {
+            await audioCtxRef.current.resume();
+          }
+          instrument.play(String(event.noteNumber), audioCtxRef.current!.currentTime, {
+            gain: event.velocity / 127,
+            duration: 0.5,
+          });
         } catch { /* ignore */ }
       }
       if (event.name === 'End of file') {
@@ -290,7 +317,7 @@ export default function StudioPage() {
     });
     player.loadArrayBuffer(bytes.buffer);
     midiPlayerRef.current = player;
-  }, []);
+  }, [loadSoundfont]);
 
   // MIDI file parsing via @tonejs/midi
   const parseMidiFile = useCallback(async (file: File) => {
@@ -313,10 +340,15 @@ export default function StudioPage() {
       }
       setUploadedNotes(notes);
 
+      // Store raw bytes as base64 in localStorage → sheet-music page reads same file
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      localStorage.setItem('melodica_midi_base64', base64);
+      localStorage.setItem('melodica_midi_name', file.name);
+
       // Draw piano-roll from the parsed MIDI
       drawPianoRoll(midi);
       // Init MidiPlayer for playback
-      await initMidiPlayer(midiRawBlobRef.current);
+      await initMidiPlayer(midiRawBlobRef.current!);
     } catch (e) {
       console.error('MIDI parse error', e);
     } finally {
@@ -566,35 +598,25 @@ export default function StudioPage() {
             </Link>
           </div>
 
-          {/* Piano Roll (powered by midi-player-js data) */}
-          <div style={{ padding: '12px 16px 0', borderBottom: '1px solid var(--border)', background: 'var(--bg-primary)', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+
+          {/* Piano Roll — fills remaining left-panel height */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
               <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Piano Roll</p>
               {wsReady && uploadedFile && <p style={{ fontSize: 10, color: 'var(--accent-teal)', fontWeight: 600 }}>{uploadedFile}</p>}
             </div>
-            <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', background: '#1a1828', minHeight: 160 }}>
+            <div style={{ flex: 1, position: 'relative', background: '#0f0e1c', overflow: 'hidden' }}>
               <canvas
                 ref={pianoRollCanvasRef}
-                style={{ display: wsReady ? 'block' : 'none', width: '100%', height: 160 }}
+                style={{ display: wsReady ? 'block' : 'none', width: '100%', height: '100%' }}
               />
               {!wsReady && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 160, gap: 8 }}>
-                  <span className="material-symbols-rounded" style={{ fontSize: 18, color: 'var(--text-muted)' }}>piano</span>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Upload a MIDI file to see the piano roll</p>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 10, opacity: 0.5 }}>
+                  <span className="material-symbols-rounded" style={{ fontSize: 40, color: 'var(--text-muted)' }}>piano</span>
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '0 24px' }}>Upload a MIDI file from the right panel to see the piano roll here</p>
                 </div>
               )}
             </div>
-          </div>
-
-          {/* MIDI notation preview */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
-              Notation Preview {uploadedNotes.length > 0 && <span className="badge badge-teal" style={{ marginLeft: 8, fontSize: 9 }}>{uploadedNotes.length} notes</span>}
-            </p>
-            <PianoNotation notes={uploadedNotes.slice(0, 8)} width={420} height={130} />
-            {uploadedNotes.length === 0 && (
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 12 }}>Upload a MIDI file or record from the Piano to see notation here.</p>
-            )}
           </div>
         </div>
 
@@ -850,7 +872,19 @@ export default function StudioPage() {
                       ))}
                       {uploadedNotes.length > 24 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>+{uploadedNotes.length - 24} more</span>}
                     </div>
-                    <Link href="/sheet-music" className="btn-teal" style={{ display: 'block', textAlign: 'center', marginTop: 14, padding: '11px', fontSize: 13 }}>View Full Sheet Music</Link>
+                    <button
+                      onClick={async () => {
+                        // Ensure the raw MIDI is in localStorage before navigating
+                        if (midiRawBlobRef.current) {
+                          const buf = await midiRawBlobRef.current.arrayBuffer();
+                          const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+                          localStorage.setItem('melodica_midi_base64', base64);
+                          localStorage.setItem('melodica_midi_name', midiFileNameRef.current);
+                        }
+                        window.location.href = '/sheet-music';
+                      }}
+                      className="btn-teal" style={{ display: 'block', width: '100%', textAlign: 'center', marginTop: 14, padding: '11px', fontSize: 13, border: 'none', cursor: 'pointer', borderRadius: 10 }}
+                    >View Full Sheet Music</button>
                   </div>
                 )}
               </div>
