@@ -122,12 +122,40 @@ export default function StudioPage() {
   const [exporting, setExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
 
+  // AI Generate — seed file
+  const [seedFile, setSeedFile] = useState<File | null>(null);
+  const seedFileRef = useRef<HTMLInputElement>(null);
+
+  // Generated notation (shown after successful AI generation)
+  const [generatedNotes, setGeneratedNotes] = useState<NoteEntry[]>([]);
+  const [generatedMidiBlob, setGeneratedMidiBlob] = useState<Blob | null>(null);
+
+  // Piano-as-seed: use the loaded piano recording as AI seed
+  const [usePianoAsSeed, setUsePianoAsSeed] = useState(false);
+
   // Backend health
   useEffect(() => {
     fetch('http://localhost:8000/health', { signal: AbortSignal.timeout(3000) })
       .then(r => setBackendAlive(r.ok))
       .catch(() => setBackendAlive(false));
   }, []);
+
+  // Load piano notes from localStorage (set by piano page "Open in Studio")
+  useEffect(() => {
+    const stored = localStorage.getItem('melodica_piano_notes');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as NoteEntry[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setUploadedNotes(parsed);
+          setUploadedFile('Piano Recording');
+          setTab('file-upload'); // switch to upload tab to show the notes
+        }
+      } catch { /* ignore */ }
+      localStorage.removeItem('melodica_piano_notes');
+    }
+  }, []);
+
 
   // Initialize Wavesurfer (browser-only)
   useEffect(() => {
@@ -153,12 +181,25 @@ export default function StudioPage() {
   }, []);
 
   // Transport controls
-  const handlePlay = useCallback(() => {
+  const handlePlay = useCallback(async () => {
     const ws = wavesurferRef.current;
-    if (!ws) return;
-    if (isPlaying) { ws.pause(); setIsPlaying(false); }
-    else { ws.play(); setIsPlaying(true); }
-  }, [isPlaying]);
+    // If wavesurfer has an audio file loaded, use it
+    if (ws && wsReady) {
+      if (isPlaying) { ws.pause(); setIsPlaying(false); }
+      else { ws.play(); setIsPlaying(true); }
+      return;
+    }
+    // Fallback: play MIDI notes via Tone.js synth
+    if (uploadedNotes.length === 0) return;
+    const Tone = await import('tone');
+    await Tone.start();
+    const synth = new Tone.PolySynth().toDestination();
+    uploadedNotes.forEach((n, i) => {
+      synth.triggerAttackRelease(n.pitch, '8n', Tone.now() + i * 0.4);
+    });
+    setIsPlaying(true);
+    setTimeout(() => { synth.dispose(); setIsPlaying(false); }, uploadedNotes.length * 400 + 500);
+  }, [isPlaying, wsReady, uploadedNotes]);
 
   const handleStop = useCallback(() => {
     const ws = wavesurferRef.current;
@@ -171,6 +212,16 @@ export default function StudioPage() {
     setIsRecording(r => !r);
   }, []);
 
+  // Flat → sharp normalisation for VexFlow
+  const FLAT_TO_SHARP: Record<string, string> = {
+    'Bb': 'A#', 'Db': 'C#', 'Eb': 'D#', 'Gb': 'F#', 'Ab': 'G#',
+  };
+  const normalisePitch = (name: string): string => {
+    const m = name.match(/^([A-G]b?)(\d)$/);
+    if (m && FLAT_TO_SHARP[m[1]]) return `${FLAT_TO_SHARP[m[1]]}${m[2]}`;
+    return name;
+  };
+
   // MIDI file parsing via @tonejs/midi
   const parseMidiFile = useCallback(async (file: File) => {
     setUploadedFile(file.name);
@@ -181,20 +232,18 @@ export default function StudioPage() {
       const notes: NoteEntry[] = [];
       for (const track of midi.tracks) {
         for (const note of track.notes) {
-          notes.push({ pitch: note.name, duration: 'q' });
-          if (notes.length >= 16) break;
+          notes.push({ pitch: normalisePitch(note.name), duration: 'q' });
+          if (notes.length >= 48) break;
         }
-        if (notes.length >= 16) break;
+        if (notes.length >= 48) break;
       }
       setUploadedNotes(notes);
-
-      // Also load waveform preview if it's a small MIDI
-      // (WaveSurfer can load audio blobs; MIDI is not audio so we skip waveform for MIDI)
     } catch (e) {
       console.error('MIDI parse error', e);
     } finally {
       setAnalyzing(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleFileDrop = (file: File) => {
@@ -209,12 +258,59 @@ export default function StudioPage() {
     }
   };
 
+  // Helper: convert NoteEntry[] → MIDI File object (for sending as seed)
+  const notesToMidiFile = async (notes: NoteEntry[]): Promise<File> => {
+    const { Midi } = await import('@tonejs/midi');
+    const midi = new Midi();
+    const track = midi.addTrack();
+    const STEP_MIDI: Record<string, number> = {
+      'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5,
+      'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11,
+    };
+    const DUR_SEC: Record<string, number> = {
+      'w': 2, 'h': 1, 'q': 0.5, '8': 0.25, '16': 0.125,
+    };
+    notes.forEach((n, i) => {
+      const m = n.pitch.match(/^([A-G]#?)(\d)$/);
+      const midiNum = m ? (parseInt(m[2]) + 1) * 12 + (STEP_MIDI[m[1]] ?? 0) : 60;
+      const dur = DUR_SEC[n.duration] ?? 0.5;
+      track.addNote({ midi: midiNum, time: i * 0.5, duration: dur, velocity: 0.8 });
+    });
+    const bytes = new Uint8Array(midi.toArray());
+    return new File([bytes], 'piano_seed.mid', { type: 'audio/midi' });
+  };
+
+  // Helper: parse a MIDI Blob into NoteEntry[]
+  const parseMidiBlob = async (blob: Blob): Promise<NoteEntry[]> => {
+    try {
+      const buf = await blob.arrayBuffer();
+      const midi = new Midi(buf);
+      const notes: NoteEntry[] = [];
+      for (const track of midi.tracks) {
+        for (const note of track.notes) {
+          const m = note.name.match(/^([A-G]b?)(\d)$/);
+          let pitch = note.name;
+          const FLAT_TO_SHARP_LOCAL: Record<string, string> = {
+            'Bb': 'A#', 'Db': 'C#', 'Eb': 'D#', 'Gb': 'F#', 'Ab': 'G#',
+          };
+          if (m && FLAT_TO_SHARP_LOCAL[m[1]]) pitch = `${FLAT_TO_SHARP_LOCAL[m[1]]}${m[2]}`;
+          notes.push({ pitch, duration: 'q' });
+          if (notes.length >= 48) break;
+        }
+        if (notes.length >= 48) break;
+      }
+      return notes;
+    } catch { return []; }
+  };
+
   // AI generation
   const handleGenerate = async () => {
     if (!backendAlive) return;
     setGenerating(true);
     setGenError(null);
     setGenProgress(0);
+    setGeneratedNotes([]);
+    setGeneratedMidiBlob(null);
 
     // Simulate progress while request is in-flight
     const interval = setInterval(() => {
@@ -222,21 +318,46 @@ export default function StudioPage() {
     }, 800);
 
     try {
-      const res = await fetch('http://localhost:8000/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ length: genLength, temperature, top_k: topK, genre }),
-      });
+      // Determine seed: piano recording takes priority over manual file
+      let resolvedSeedFile: File | null = seedFile;
+      if (usePianoAsSeed && uploadedNotes.length > 0) {
+        resolvedSeedFile = await notesToMidiFile(uploadedNotes);
+      }
+
+      // Choose endpoint: multipart when seed file present, JSON otherwise
+      let res: Response;
+      if (resolvedSeedFile) {
+        const fd = new FormData();
+        fd.append('file', resolvedSeedFile);
+        fd.append('length', String(genLength));
+        fd.append('temperature', String(temperature));
+        fd.append('top_k', String(topK));
+        fd.append('genre', String(genre));
+        res = await fetch('http://localhost:8000/generate-with-seed', { method: 'POST', body: fd });
+      } else {
+        res = await fetch('http://localhost:8000/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ length: genLength, temperature, top_k: topK, genre }),
+        });
+      }
       clearInterval(interval);
       if (!res.ok) throw new Error(await res.text());
       setGenProgress(100);
       const blob = await res.blob();
-      // Auto-download the returned MIDI
+
+      // Parse the returned MIDI blob into notation
+      const notes = await parseMidiBlob(blob);
+      setGeneratedNotes(notes);
+      setGeneratedMidiBlob(blob);
+      // Load notes into main track view
+      if (notes.length > 0) setUploadedNotes(notes);
+
+      // Auto-download as .mid
+      const genName = `melodica_gen_${GENRES[genre].label.toLowerCase()}.mid`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
-      a.download = `melodica_gen_${GENRES[genre].label.toLowerCase()}.mid`;
-      a.click();
+      a.href = url; a.download = genName; a.click();
       URL.revokeObjectURL(url);
     } catch (e: unknown) {
       clearInterval(interval);
@@ -468,6 +589,56 @@ export default function StudioPage() {
                   </div>
                 </div>
 
+                {/* ── Piano Recording as Seed ── */}
+                {uploadedNotes.length > 0 && uploadedFile === 'Piano Recording' && (
+                  <div style={{ marginBottom: 16, background: 'rgba(139,92,246,0.06)', border: `1px solid ${usePianoAsSeed ? 'rgba(139,92,246,0.4)' : 'var(--border)'}`, borderRadius: 10, padding: '12px 14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="material-symbols-rounded" style={{ fontSize: 18, color: 'var(--accent-purple)' }}>piano</span>
+                        <div>
+                          <p style={{ fontSize: 13, fontWeight: 700, color: usePianoAsSeed ? 'var(--accent-purple-light)' : 'var(--text-primary)' }}>Piano Recording</p>
+                          <p style={{ fontSize: 10, color: 'var(--text-muted)' }}>{uploadedNotes.length} recorded notes</p>
+                        </div>
+                      </div>
+                      {/* Toggle switch */}
+                      <button
+                        onClick={() => { setUsePianoAsSeed(p => !p); if (!usePianoAsSeed) setSeedFile(null); }}
+                        style={{ padding: '6px 14px', background: usePianoAsSeed ? 'rgba(139,92,246,0.25)' : 'var(--bg-card)', border: `1px solid ${usePianoAsSeed ? 'var(--accent-purple)' : 'var(--border)'}`, borderRadius: 8, cursor: 'pointer', color: usePianoAsSeed ? 'var(--accent-purple-light)' : 'var(--text-secondary)', fontSize: 12, fontWeight: 600, transition: 'all 0.2s' }}
+                      >
+                        {usePianoAsSeed ? '✓ Use as Seed' : 'Use as Seed'}
+                      </button>
+                    </div>
+                    {usePianoAsSeed && (
+                      <p style={{ fontSize: 10, color: 'var(--accent-purple-light)', marginTop: 8 }}>Your piano recording will be used as the musical seed for AI generation.</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Seed MIDI file (optional) */}
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 8 }}>
+                    Seed MIDI File <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional)</span>
+                  </label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button
+                      onClick={() => seedFileRef.current?.click()}
+                      style={{ flex: 1, padding: '9px 14px', background: 'var(--bg-card)', border: `1px solid ${seedFile ? 'var(--accent-teal)' : 'var(--border)'}`, borderRadius: 8, cursor: 'pointer', color: seedFile ? 'var(--accent-teal-light)' : 'var(--text-secondary)', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}
+                    >
+                      <span className="material-symbols-rounded" style={{ fontSize: 15, flexShrink: 0 }}>{seedFile ? 'audio_file' : 'upload_file'}</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{seedFile ? seedFile.name : 'Select .mid file…'}</span>
+                    </button>
+                    {seedFile && (
+                      <button onClick={() => setSeedFile(null)} style={{ padding: '9px 10px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, cursor: 'pointer', color: '#f87171', fontSize: 12 }}>
+                        <span className="material-symbols-rounded" style={{ fontSize: 15 }}>close</span>
+                      </button>
+                    )}
+                  </div>
+                  <input ref={seedFileRef} type="file" accept=".mid,.midi" style={{ display: 'none' }}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) setSeedFile(f); e.target.value = ''; }}
+                  />
+                  <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 5 }}>Upload a MIDI file to use as the musical seed for generation.</p>
+                </div>
+
                 {/* Progress bar (visible during generation) */}
                 {generating && (
                   <div style={{ marginBottom: 16 }}>
@@ -505,8 +676,45 @@ export default function StudioPage() {
                   {generating ? `Generating… (${genProgress}%)` : 'Generate MIDI'}
                 </button>
                 <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', marginTop: 8 }}>
-                  The generated MIDI file will download automatically.
+                  {seedFile ? `Will generate using “${seedFile.name}” as seed.` : 'The generated MIDI file will download automatically.'}
                 </p>
+
+                {/* Generated output notation */}
+                {generatedNotes.length > 0 && (
+                  <div style={{ marginTop: 24, background: 'rgba(20,184,166,0.06)', border: '1px solid rgba(20,184,166,0.25)', borderRadius: 12, padding: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="material-symbols-rounded" style={{ color: 'var(--accent-teal)', fontSize: 18 }}>check_circle</span>
+                        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-teal-light)' }}>Generated Output</p>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <span className="badge badge-teal" style={{ fontSize: 10 }}>{generatedNotes.length} notes</span>
+                        <button
+                          onClick={() => {
+                            if (!generatedMidiBlob) return;
+                            const url = URL.createObjectURL(generatedMidiBlob);
+                            const a = document.createElement('a');
+                            a.href = url; a.download = `melodica_gen_${GENRES[genre].label.toLowerCase()}.mid`; a.click();
+                            URL.revokeObjectURL(url);
+                          }}
+                          style={{ padding: '3px 10px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
+                        >
+                          <span className="material-symbols-rounded" style={{ fontSize: 13 }}>download</span>
+                          .mid
+                        </button>
+                      </div>
+                    </div>
+                    {/* Inline VexFlow notation of generated output */}
+                    <div style={{ background: 'white', borderRadius: 8, padding: '12px', overflow: 'hidden' }}>
+                      <PianoNotation notes={generatedNotes.slice(0, 8)} width={340} height={120} />
+                    </div>
+                    {generatedNotes.length > 8 && (
+                      <p style={{ fontSize: 10, color: 'var(--accent-teal-light)', marginTop: 8, textAlign: 'center' }}>
+                        Showing first 8 of {generatedNotes.length} notes — see full notation in the track preview
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

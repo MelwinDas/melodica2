@@ -10,7 +10,10 @@
   },
   "dependencies": {
     "@tonejs/midi": "^2.0.28",
+    "jzz": "^1.9.6",
+    "midi-player-js": "^2.0.17",
     "next": "16.1.6",
+    "opensheetmusicdisplay": "^1.9.7",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "tone": "^15.1.22",

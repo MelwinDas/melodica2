@@ -91,12 +91,34 @@ export default function PianoPage() {
     }
   }, [recording, samplerReady]);
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
+    if (!backendAlive) return;
     setGenerating(true);
-    setTimeout(() => { setGenerating(false); setGenerated(true); }, 2500);
+    try {
+      const res = await fetch('http://localhost:8000/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ length: 256, temperature: 0.9, top_k: 20, genre: 0 }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'melodica_generated.mid'; a.click();
+      URL.revokeObjectURL(url);
+      setGenerated(true);
+    } catch (e) { console.error(e); }
+    finally { setGenerating(false); }
   };
 
   const clearRecording = () => { setRecordedNotes([]); setGenerated(false); };
+
+  // Save notes to localStorage then navigate — so Studio/SheetMusic can pick them up
+  const saveAndGo = (path: string) => {
+    const notes = recordedNotes.map(n => ({ pitch: n.pitch, duration: n.duration }));
+    localStorage.setItem('melodica_piano_notes', JSON.stringify(notes));
+    window.location.href = path;
+  };
 
   // Notes for VexFlow (last 8 max)
   const vfNotes = recordedNotes.slice(-8).map(n => ({ pitch: n.pitch, duration: n.duration }));
@@ -153,7 +175,11 @@ export default function PianoPage() {
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: recording ? 'var(--accent-pink)' : 'var(--text-muted)', flexShrink: 0, animation: recording ? 'pulse 1s infinite' : 'none' }} />
             {recording ? 'Recording...' : 'Record'}
           </button>
-          <Link href="/studio" className="btn-secondary" style={{ padding: '8px 18px', fontSize: 13 }}>Open in Studio</Link>
+          <button
+            onClick={() => saveAndGo('/studio')}
+            className="btn-secondary"
+            style={{ padding: '8px 18px', fontSize: 13 }}
+          >Open in Studio</button>
         </div>
       </div>
 
@@ -167,7 +193,7 @@ export default function PianoPage() {
             {recordedNotes.length > 0 && (
               <span className="badge badge-teal">{recordedNotes.length} notes</span>
             )}
-            <Link href="/sheet-music" style={{ fontSize: 12, color: 'var(--accent-purple-light)', textDecoration: 'none' }}>Full View →</Link>
+            <button onClick={() => saveAndGo('/sheet-music')} style={{ fontSize: 12, color: 'var(--accent-purple-light)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Full View →</button>
           </div>
         </div>
         <PianoNotation notes={vfNotes} width={740} height={130} />
