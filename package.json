@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.99.0",
     "@tonejs/midi": "^2.0.28",
     "jzz": "^1.9.6",
     "midi-player-js": "^2.0.17",

@@ -220,7 +220,7 @@ export default function StudioPage() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const W = canvas.offsetWidth || 800;
-    const H = 90;
+    const H = 160;
     canvas.width = W; canvas.height = H;
 
     // Collect all notes
@@ -568,13 +568,17 @@ export default function StudioPage() {
 
           {/* Piano Roll (powered by midi-player-js data) */}
           <div style={{ padding: '12px 16px 0', borderBottom: '1px solid var(--border)', background: 'var(--bg-primary)', flexShrink: 0 }}>
-            <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', background: '#1a1828', minHeight: 90 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Piano Roll</p>
+              {wsReady && uploadedFile && <p style={{ fontSize: 10, color: 'var(--accent-teal)', fontWeight: 600 }}>{uploadedFile}</p>}
+            </div>
+            <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', background: '#1a1828', minHeight: 160 }}>
               <canvas
                 ref={pianoRollCanvasRef}
-                style={{ display: wsReady ? 'block' : 'none', width: '100%', height: 90 }}
+                style={{ display: wsReady ? 'block' : 'none', width: '100%', height: 160 }}
               />
               {!wsReady && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 90, gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 160, gap: 8 }}>
                   <span className="material-symbols-rounded" style={{ fontSize: 18, color: 'var(--text-muted)' }}>piano</span>
                   <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Upload a MIDI file to see the piano roll</p>
                 </div>
