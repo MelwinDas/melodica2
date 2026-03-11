@@ -469,25 +469,27 @@ export default function StudioPage() {
       clearInterval(interval);
       if (!res.ok) throw new Error(await res.text());
       setGenProgress(100);
-      const blob = await res.blob();
-      // Store the exact response blob IMMEDIATELY — before any async ops that might invalidate it
-      setGeneratedMidiBlob(blob);
-
-      // Name it before use
+      // Read as raw bytes and wrap with explicit MIME type to avoid UUID filename bug
+      const arrayBuf = await res.arrayBuffer();
       const genName = `melodica_gen_${GENRES[genre].label.toLowerCase()}.mid`;
+      const typedBlob = new Blob([arrayBuf], { type: 'audio/midi' });
+      // Store immediately for export use
+      setGeneratedMidiBlob(typedBlob);
 
-      // Auto-download the generated .mid immediately
-      const dlBlob = blob.slice(0); // snapshot to avoid revocation issues
-      const url = URL.createObjectURL(dlBlob);
+      // Trigger download: anchor MUST be in DOM for download attr to work in all browsers
+      const url = URL.createObjectURL(typedBlob);
       const a = document.createElement('a');
-      a.href = url; a.download = genName; a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 5000); // revoke after 5s
+      a.href = url;
+      a.download = genName;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 8000);
 
-      // Load generated MIDI into piano roll + midiRawBlobRef for future export
-      if (blob && blob.size > 0) {
-        const genFile = new File([blob.slice(0)], genName, { type: 'audio/midi' });
-        await parseMidiFile(genFile);
-      }
+      // Load into piano roll + set as active MIDI (raw bytes, no conversion)
+      const genFile = new File([arrayBuf], genName, { type: 'audio/midi' });
+      await parseMidiFile(genFile);
     } catch (e: unknown) {
       clearInterval(interval);
       setGenError(e instanceof Error ? e.message : 'Generation failed');
@@ -814,8 +816,13 @@ export default function StudioPage() {
                             if (!generatedMidiBlob) return;
                             const url = URL.createObjectURL(generatedMidiBlob);
                             const a = document.createElement('a');
-                            a.href = url; a.download = `melodica_gen_${GENRES[genre].label.toLowerCase()}.mid`; a.click();
-                            URL.revokeObjectURL(url);
+                            a.href = url;
+                            a.download = `melodica_gen_${GENRES[genre].label.toLowerCase()}.mid`;
+                            a.style.display = 'none';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            setTimeout(() => URL.revokeObjectURL(url), 5000);
                           }}
                           style={{ padding: '3px 10px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}
                         >
