@@ -110,6 +110,10 @@ export default function StudioPage() {
   const midiSecPerBeatRef = useRef<number>(0.5);                   // set when MIDI parsed
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const toneTransportRef  = useRef<any>(null);                     // Tone.Transport reference
+  const highlightCanvasRef = useRef<HTMLCanvasElement>(null);      // active-note glow overlay
+  const midiNotesRef       = useRef<{midi:number;time:number;dur:number;vel:number}[]>([]);
+  const midiPitchRangeRef  = useRef<{min:number;max:number}>({min:48,max:72});
+  const [playheadActive, setPlayheadActive] = useState(false);     // playhead visible after first play
 
   // Sync vertical scroll between piano keys and grid
   const onGridScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
@@ -206,28 +210,81 @@ export default function StudioPage() {
     rafRef.current = 0;
     toneTransportRef.current = null;
     if (playheadRef.current) playheadRef.current.style.left = '0px';
+    setPlayheadActive(false);
+    const hc = highlightCanvasRef.current;
+    if (hc) { const c = hc.getContext('2d'); if (c) c.clearRect(0, 0, hc.width, hc.height); }
   }, []);
 
   const startPlayhead = useCallback(() => {
+    setPlayheadActive(true);
     cancelAnimationFrame(rafRef.current);
     const tick = () => {
       const transport = toneTransportRef.current;
       if (!transport) return;
-      const x = (transport.seconds / midiSecPerBeatRef.current) * PX_PER_BEAT;
-      if (playheadRef.current) {
-        playheadRef.current.style.left = `${x}px`;
+      const seconds   = transport.seconds;
+      const secPerBeat = midiSecPerBeatRef.current;
+      const x = (seconds / secPerBeat) * PX_PER_BEAT;
+
+      // Move playhead line
+      if (playheadRef.current) playheadRef.current.style.left = `${x}px`;
+
+      // ── Active-note glow on highlight canvas ──────────────────────────
+      const hc = highlightCanvasRef.current;
+      if (hc) {
+        const ctx = hc.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, hc.width, hc.height);
+          const maxPitch = midiPitchRangeRef.current.max;
+          const isBlk = (m: number) => [1,3,6,8,10].includes(m % 12);
+          for (const note of midiNotesRef.current) {
+            if (seconds >= note.time && seconds <= note.time + note.dur) {
+              const rowIdx = maxPitch - note.midi;
+              const xStart = (note.time / secPerBeat) * PX_PER_BEAT;
+              const nw     = Math.max((note.dur / secPerBeat) * PX_PER_BEAT - 1, 3);
+              const y      = RULER_H + rowIdx * ROW_H;
+              const nh     = ROW_H - 2;
+              const black  = isBlk(note.midi);
+              ctx.save();
+              ctx.shadowBlur  = 18;
+              ctx.shadowColor = black ? 'rgba(192,132,252,0.95)' : 'rgba(110,231,183,0.95)';
+              ctx.strokeStyle = black ? '#e9d5ff' : '#a7f3d0';
+              ctx.lineWidth   = 2.5;
+              ctx.beginPath();
+              ctx.roundRect(xStart + 1, y + 1, nw - 1, nh - 1, 2);
+              ctx.stroke();
+              ctx.restore();
+            }
+          }
+        }
       }
+
       // Auto-scroll: keep playhead near 75 % of visible width
       if (gridScrollRef.current) {
         const cw = gridScrollRef.current.clientWidth;
         const sl = gridScrollRef.current.scrollLeft;
-        if (x > sl + cw * 0.75) {
-          gridScrollRef.current.scrollLeft = x - cw * 0.15;
-        }
+        if (x > sl + cw * 0.75) gridScrollRef.current.scrollLeft = x - cw * 0.15;
       }
+
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
+  }, []);
+
+  // Pause: freeze playhead in place, stop audio, clear glow — DON'T reset position
+  const pausePlayback = useCallback(async () => {
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = 0;
+    const hc = highlightCanvasRef.current;
+    if (hc) { const c = hc.getContext('2d'); if (c) c.clearRect(0, 0, hc.width, hc.height); }
+    try {
+      const Tone = await import('tone');
+      Tone.Transport.stop();
+      Tone.Transport.cancel();
+      if (tonePartRef.current) { tonePartRef.current.dispose(); tonePartRef.current = null; }
+      if (toneSynthRef.current) { toneSynthRef.current.dispose(); toneSynthRef.current = null; }
+    } catch { /* ignore */ }
+    setIsPlaying(false);
+    // playheadActive stays true → line remains visible at frozen position
   }, []);
 
   const scheduleAndPlay = useCallback(async () => {
@@ -299,12 +356,11 @@ export default function StudioPage() {
   // Transport controls
   const handlePlay = useCallback(async () => {
     if (isPlaying) {
-      await stopTone();
+      await pausePlayback(); // freeze playhead at current position
       return;
     }
-    // Use Tone.js direct scheduling (no CDN, no blocking)
     await scheduleAndPlay();
-  }, [isPlaying, scheduleAndPlay, stopTone]);
+  }, [isPlaying, scheduleAndPlay, pausePlayback]);
 
   const handleStop = useCallback(async () => {
     await stopTone();
@@ -358,12 +414,20 @@ export default function StudioPage() {
     const maxPitch = Math.min(127, Math.max(...allNotes.map(n => n.midi)) + 4);
     const pitchRange = maxPitch - minPitch + 1;
 
+    // Store note data for playhead animation
+    midiNotesRef.current = allNotes;
+    midiPitchRangeRef.current = { min: minPitch, max: maxPitch };
+
     const canvasH = RULER_H + pitchRange * ROW_H;
     const gridW   = totalBeats * PX_PER_BEAT;
 
-    // Resize both canvases
+    // Resize all three canvases
     keysCanvas.width  = KEY_W;  keysCanvas.height = canvasH;
     gridCanvas.width  = gridW;  gridCanvas.height = canvasH;
+    if (highlightCanvasRef.current) {
+      highlightCanvasRef.current.width  = gridW;
+      highlightCanvasRef.current.height = canvasH;
+    }
     setRollCanvasH(canvasH);
     setRollCanvasW(gridW);
 
@@ -935,6 +999,16 @@ export default function StudioPage() {
                     style={{ display: 'block', width: rollCanvasW, height: rollCanvasH }}
                   />
 
+                  {/* Highlight canvas — transparent overlay, drawn each rAF tick */}
+                  <canvas
+                    ref={highlightCanvasRef}
+                    style={{
+                      position: 'absolute', top: 0, left: 0,
+                      width: rollCanvasW, height: rollCanvasH,
+                      pointerEvents: 'none',
+                    }}
+                  />
+
                   {/* ── Playhead ── */}
                   <div
                     ref={playheadRef}
@@ -948,7 +1022,7 @@ export default function StudioPage() {
                       boxShadow: '0 0 8px 1px rgba(255,77,77,0.65)',
                       pointerEvents: 'none',
                       zIndex: 20,
-                      display: isPlaying ? 'block' : 'none',
+                      display: playheadActive ? 'block' : 'none',
                     }}
                   >
                     {/* Triangle caret at top of playhead */}
