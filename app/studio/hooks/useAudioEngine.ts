@@ -29,6 +29,7 @@ export function useAudioEngine() {
     bpm: number,
     onTick?: (seconds: number) => void,
     onEnd?: () => void,
+    startTime: number = 0
   ) => {
     if (notes.length === 0) return;
     await cleanup();
@@ -66,6 +67,7 @@ export function useAudioEngine() {
     }, endTime + 0.3);
 
     part.start(0);
+    transport.seconds = startTime;
     transport.start();
     transportRef.current = transport;
     setIsPlaying(true);
@@ -111,6 +113,13 @@ export function useAudioEngine() {
         };
         rafRef.current = requestAnimationFrame(tick);
       }
+    } catch { /* ignore */ }
+  }, []);
+
+  const setPlaybackBpm = useCallback(async (bpm: number) => {
+    try {
+      const Tone = await import('tone');
+      Tone.getTransport().bpm.value = bpm;
     } catch { /* ignore */ }
   }, []);
 
@@ -175,6 +184,6 @@ export function useAudioEngine() {
   return {
     isPlaying, play, pause, stop, resume,
     previewNote, recordAudioBlob, notesToMidiBlob,
-    transportRef,
+    setPlaybackBpm, transportRef,
   };
 }
