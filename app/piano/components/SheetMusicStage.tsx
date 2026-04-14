@@ -23,7 +23,8 @@ function toVexPitch(midi: number): string {
 function midiHasSharp(midi: number) { return [1,3,6,8,10].includes(midi % 12); }
 
 const MEASURE_W = 240;
-const STAFF_H   = 140; // height per staff including padding
+const STAFF_H   = 200; // Increased height to prevent overlapping notes
+const START_OFFSET = 100; // Alignment absolute offset
 
 export default function SheetMusicStage({
   tracks, liveNotes, playheadSeconds, isPlaying, isRecording, bpm, timeSignature, quantize, onSeek,
@@ -41,7 +42,7 @@ export default function SheetMusicStage({
     ? Math.max(...allNotes.map(n => n.time + n.duration))
     : secPerBeat * beatsPerMeasure;
   const totalMeasures = Math.max(Math.ceil(endTime / secPerBeat / beatsPerMeasure), 1);
-  const totalWidth    = Math.max(totalMeasures * MEASURE_W + 60, 720);
+  const totalWidth    = Math.max(START_OFFSET + totalMeasures * MEASURE_W + 60, 720);
   const numTracks     = Math.max(allTracks.length, 1);
   const totalHeight   = numTracks * STAFF_H + 40;
 
@@ -67,7 +68,7 @@ export default function SheetMusicStage({
       // Render each track as a separate staff row
       const renderTracks = allTracks.length > 0 ? allTracks : [[]];
       renderTracks.forEach((track, trackIdx) => {
-        const yOffset = trackIdx * STAFF_H + 20;
+        const yOffset = trackIdx * STAFF_H + 50;
 
         // Track label
         if (renderTracks.length > 1) {
@@ -75,15 +76,18 @@ export default function SheetMusicStage({
           ctx.setFont('Arial', 9, 'italic');
           const isLive = trackIdx === renderTracks.length - 1 && liveNotes.length > 0;
           ctx.setFillStyle(isLive ? '#ec4899' : '#a09aba');
-          ctx.fillText(isLive ? '● LIVE' : `Track ${trackIdx + 1}`, 4, yOffset + 12);
+          ctx.fillText(isLive ? '● LIVE' : `Track ${trackIdx + 1}`, 10, yOffset - 10);
           ctx.restore();
         }
 
         for (let m = 0; m < totalMeasures; m++) {
-          const x = m * MEASURE_W + 10;
+          const isFirst = m === 0;
+          const x = isFirst ? START_OFFSET - 80 : START_OFFSET + m * MEASURE_W;
+          const w = isFirst ? MEASURE_W + 80 : MEASURE_W;
+          
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const stave: any = new Stave(x, yOffset, MEASURE_W - 10);
-          if (m === 0) {
+          const stave: any = new Stave(x, yOffset, w);
+          if (isFirst) {
             stave.addClef('treble');
             if (trackIdx === 0) stave.addTimeSignature(timeSignature);
           }
@@ -93,22 +97,28 @@ export default function SheetMusicStage({
           const mEnd   = (m + 1) * beatsPerMeasure * secPerBeat;
           const mn     = track.filter(n => n.time >= mStart && n.time < mEnd);
 
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const vf: any[] = [];
-          for (const n of mn.slice(0, 4)) {
-            const sn = new StaveNote({ keys: [toVexPitch(n.midi)], duration: 'q' });
-            if (midiHasSharp(n.midi)) sn.addModifier(new Accidental('#'));
-            vf.push(sn);
-          }
-          while (vf.length < beatsPerMeasure) vf.push(new StaveNote({ keys: ['b/4'], duration: 'qr' }));
+          for (const n of mn) {
+            let duration = 'q';
+            if (n.duration < secPerBeat * 0.35) duration = '16';
+            else if (n.duration < secPerBeat * 0.75) duration = '8';
+            else if (n.duration < secPerBeat * 1.5) duration = 'q';
+            else duration = 'h';
 
-          try {
-            const voice = new Voice({ numBeats: beatsPerMeasure, beatValue: parseInt(timeSignature.split('/')[1]) || 4 });
-            voice.setStrict(false);
-            voice.addTickables(vf);
-            new Formatter().joinVoices([voice]).format([voice], MEASURE_W - 60);
-            voice.draw(ctx, stave);
-          } catch { /* skip */ }
+            const sn = new StaveNote({ keys: [toVexPitch(n.midi)], duration });
+            if (midiHasSharp(n.midi)) sn.addModifier(new Accidental('#'));
+
+            const absX = START_OFFSET + (n.time / secPerBeat) * (MEASURE_W / beatsPerMeasure);
+            
+            sn.setStave(stave);
+            sn.setContext(ctx);
+            const tc = new F.TickContext();
+            tc.setX(absX - stave.getNoteStartX() - 5);
+            sn.setTickContext(tc);
+            const mc = new F.ModifierContext();
+            sn.addToModifierContext(mc);
+            sn.preFormat();
+            sn.draw();
+          }
         }
       });
     });
@@ -118,7 +128,7 @@ export default function SheetMusicStage({
   // ── Playhead X position ─────────────────────────────────────────────
   const getPlayheadX = useCallback((seconds: number = playheadSeconds) => {
     const totalBeats = seconds / secPerBeat;
-    return 50 + (totalBeats / beatsPerMeasure) * MEASURE_W;
+    return START_OFFSET + totalBeats * (MEASURE_W / beatsPerMeasure);
   }, [playheadSeconds, secPerBeat, beatsPerMeasure]);
 
   // Auto-scroll to keep playhead visible
@@ -134,9 +144,10 @@ export default function SheetMusicStage({
     if (!scrollRef.current) return;
     const rect = scrollRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left + scrollRef.current.scrollLeft;
-    const relX = x - 50; // account for clef offset
-    const measuresOffset = Math.max(0, relX) / MEASURE_W;
-    const beats = measuresOffset * beatsPerMeasure;
+    const relX = x - START_OFFSET;
+    const measuresOffset = Math.max(0, relX) / (MEASURE_W / beatsPerMeasure);
+    // actually it's totalBeats: relX / (MEASURE_W / beatsPerMeasure) = totalBeats
+    const beats = measuresOffset;
     const time  = Math.max(0, beats * secPerBeat);
     onSeek(Math.min(time, endTime));
   }, [secPerBeat, beatsPerMeasure, endTime, onSeek]);
@@ -240,7 +251,7 @@ export default function SheetMusicStage({
                   : `hsla(${260 + ti * 40}, 70%, 65%, 1)`;
                 return track.map((n, ni) => {
                   const x = getPlayheadX(n.time);
-                  const w = Math.max(getPlayheadX(n.duration) - 50, 3); // 50 is base offset
+                  const w = Math.max(getPlayheadX(n.duration) - START_OFFSET, 3);
                   const y = ((maxM - n.midi) / range) * (shadowH - 4) + 2;
                   const h = Math.max(shadowH / range - 1, 2);
                   return (
@@ -253,15 +264,14 @@ export default function SheetMusicStage({
               })}
             </div>
 
-            {/* ── Quantize grid lines overlay ─────────────────────────────
-                Sibling to shadow-roll so they are NOT affected by opacity:0.2 */}
+            {/* ── Quantize grid lines overlay ───────────────────────────── */}
             {quantize !== 'off' && quantizeLines.map((gx, i) => (
               <div key={`grid-${i}`} style={{
                 position: 'absolute', top: 0, height: shadowH, width: 1,
                 left: gx,
                 background: i % (quantize === '1/8' ? 2 : quantize === '1/16' ? 4 : 8) === 0
-                  ? 'rgba(139,92,246,0.55)'   // beat boundary — brighter
-                  : 'rgba(139,92,246,0.25)',   // subdivision — faint
+                  ? 'rgba(139,92,246,0.5)'   // beat boundary — brighter
+                  : 'rgba(139,92,246,0.15)',  // subdivision — faint
                 zIndex: 3, pointerEvents: 'none',
               }} />
             ))}
