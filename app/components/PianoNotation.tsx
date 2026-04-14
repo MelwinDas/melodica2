@@ -38,7 +38,9 @@ export default function PianoNotation({ notes, width = 780, height = 140 }: Prop
     const el = containerRef.current;
     el.innerHTML = '';
 
-    import('vexflow').then(({ Renderer, Stave, StaveNote, Voice, Formatter, Accidental }) => {
+    import('vexflow').then((vexModule) => {
+      const Vex = vexModule.default ?? vexModule;
+      const { Renderer, Stave, StaveNote, Voice, Formatter, Accidental } = (Vex as any).Flow ?? Vex;
       const renderer = new Renderer(el, Renderer.Backends.SVG);
       renderer.resize(width, height);
       const context = renderer.getContext();

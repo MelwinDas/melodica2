@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '../../lib/supabase';
 
@@ -47,6 +47,9 @@ export default function DashboardPage() {
   const [newName, setNewName] = useState('');
   const [newGenre, setNewGenre] = useState('');
   const [creating, setCreating] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadDragOver, setUploadDragOver] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -76,9 +79,26 @@ export default function DashboardPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     const { data } = await supabase.from('projects').insert({ name: newName.trim(), genre: newGenre || null, user_id: user.id }).select().single();
+
+    // If a file was uploaded, store it in localStorage for the studio page to pick up
+    if (uploadFile) {
+      try {
+        const buf = await uploadFile.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        const CHUNK = 8192;
+        let b64 = '';
+        for (let i = 0; i < bytes.length; i += CHUNK) {
+          b64 += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+        }
+        localStorage.setItem('melodica_midi_base64', btoa(b64));
+        localStorage.setItem('melodica_midi_name', uploadFile.name);
+        localStorage.setItem('melodica_upload_pending', 'true');
+      } catch { /* ignore */ }
+    }
+
     setCreating(false);
     setShowNewModal(false);
-    setNewName(''); setNewGenre('');
+    setNewName(''); setNewGenre(''); setUploadFile(null);
     if (data) router.push(`/studio`);
   };
 
@@ -260,14 +280,54 @@ export default function DashboardPage() {
                   ))}
                 </select>
               </div>
+
+              {/* Upload file */}
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 8 }}>
+                  Upload File <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional)</span>
+                </label>
+                <div
+                  onDragOver={e => { e.preventDefault(); setUploadDragOver(true); }}
+                  onDragLeave={() => setUploadDragOver(false)}
+                  onDrop={e => {
+                    e.preventDefault(); setUploadDragOver(false);
+                    const f = e.dataTransfer.files[0];
+                    if (f && /\.(mid|midi|mp3)$/i.test(f.name)) setUploadFile(f);
+                  }}
+                  onClick={() => uploadInputRef.current?.click()}
+                  style={{
+                    border: `2px dashed ${uploadDragOver ? 'var(--accent-purple)' : uploadFile ? 'var(--accent-teal)' : 'var(--border-light)'}`,
+                    borderRadius: 10, padding: '20px 16px', textAlign: 'center', cursor: 'pointer',
+                    background: uploadDragOver ? 'rgba(139,92,246,0.06)' : uploadFile ? 'rgba(20,184,166,0.05)' : 'var(--bg-card)',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <input ref={uploadInputRef} type="file" accept=".mid,.midi,.mp3" style={{ display: 'none' }}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) setUploadFile(f); e.target.value = ''; }} />
+                  <span className="material-symbols-rounded" style={{
+                    fontSize: 28, color: uploadFile ? 'var(--accent-teal)' : 'var(--text-muted)', display: 'block', marginBottom: 6,
+                  }}>
+                    {uploadFile ? 'audio_file' : 'upload_file'}
+                  </span>
+                  {uploadFile ? (
+                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent-teal-light)' }}>{uploadFile.name}</p>
+                  ) : (
+                    <>
+                      <p style={{ fontSize: 13, fontWeight: 500, marginBottom: 2 }}>Drop a file or click to browse</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>.mid .midi .mp3</p>
+                    </>
+                  )}
+                </div>
+              </div>
+
               <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-                <button type="button" onClick={() => setShowNewModal(false)}
+                <button type="button" onClick={() => { setShowNewModal(false); setUploadFile(null); }}
                   style={{ flex: 1, padding: '11px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14 }}>
                   Cancel
                 </button>
                 <button type="submit" disabled={creating || !newName.trim()}
                   className="btn-primary" style={{ flex: 1, border: 'none', borderRadius: 10, opacity: creating || !newName.trim() ? 0.6 : 1 }}>
-                  {creating ? 'Creating…' : 'Create & Open'}
+                  {creating ? 'Creating…' : 'Create & Open Studio'}
                 </button>
               </div>
             </form>
