@@ -30,6 +30,38 @@ export default function StudioPage() {
   const [backendAlive, setBackendAlive] = useState<boolean | null>(null);
   const [playheadSeconds, setPlayheadSeconds] = useState(0);
 
+  // ── Split Panel Resizing ─────────────────────────────────────────────
+  const [leftWidthPct, setLeftWidthPct] = useState(55);
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+  const isDraggingSplit = useRef(false);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingSplit.current) return;
+      // Calculate new percentage based on mouse position
+      const pct = (e.clientX / window.innerWidth) * 100;
+      // Enforce bounds
+      setLeftWidthPct(Math.min(Math.max(pct, MIN_LEFT_PCT), MAX_LEFT_PCT));
+      if (rightPanelCollapsed) setRightPanelCollapsed(false);
+    };
+    const handleMouseUp = () => {
+      if (isDraggingSplit.current) {
+        isDraggingSplit.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        // Reset the background of the divider handle
+        const divider = document.getElementById('studio-split-divider');
+        if (divider) divider.style.background = 'var(--border)';
+      }
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [rightPanelCollapsed]);
+
   // ── Backend health ─────────────────────────────────────────────────────
   useEffect(() => {
     fetch('http://localhost:8000/health', { signal: AbortSignal.timeout(3000) })
@@ -179,7 +211,11 @@ export default function StudioPage() {
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Left: Piano Roll + Velocity Lane */}
-        <div style={{ width: '55%', display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)' }}>
+        <div style={{
+          width: rightPanelCollapsed ? `calc(100% - ${COLLAPSED_RIGHT_W}px)` : `${leftWidthPct}%`,
+          display: 'flex', flexDirection: 'column',
+          transition: isDraggingSplit.current ? 'none' : 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+        }}>
 
           {/* Piano track header */}
           <div style={{
@@ -247,16 +283,89 @@ export default function StudioPage() {
           )}
         </div>
 
+        {/* Split Divider */}
+        <div
+          id="studio-split-divider"
+          onMouseDown={() => {
+            isDraggingSplit.current = true;
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+          }}
+          style={{
+            width: 4,
+            background: 'var(--border)',
+            cursor: 'col-resize',
+            position: 'relative',
+            zIndex: 10,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'background 0.2s',
+          }}
+        >
+          {/* Extended clickable area for resizing */}
+          <div
+            style={{ position: 'absolute', inset: '-2px -6px', cursor: 'col-resize', zIndex: 11 }}
+            onMouseEnter={(e) => { e.currentTarget.parentElement!.style.background = 'var(--accent-purple)'; }}
+            onMouseLeave={(e) => { if (!isDraggingSplit.current) e.currentTarget.parentElement!.style.background = 'var(--border)'; }}
+          />
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setRightPanelCollapsed(!rightPanelCollapsed);
+            }}
+            style={{
+              position: 'absolute',
+              top: 20,
+              left: -12,
+              width: 24,
+              height: 24,
+              borderRadius: '50%',
+              background: 'var(--bg-panel)',
+              border: '1px solid var(--border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              zIndex: 20,
+              boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            <span className="material-symbols-rounded" style={{ fontSize: 16 }}>
+              {rightPanelCollapsed ? 'keyboard_arrow_left' : 'keyboard_arrow_right'}
+            </span>
+          </button>
+        </div>
+
         {/* Right panel */}
-        <RightPanel
-          notes={timeline.notes}
-          bpm={timeline.bpm}
-          backendAlive={backendAlive}
-          onLoadMidi={handleLoadMidi}
-          onAppendGenerated={handleAppendGenerated}
-          onExportMidi={handleExportMidi}
-          recordAudioBlob={audio.recordAudioBlob}
-        />
+        <div style={{
+          width: rightPanelCollapsed ? COLLAPSED_RIGHT_W : `calc(${100 - leftWidthPct}%)`,
+          overflow: 'hidden',
+          transition: isDraggingSplit.current ? 'none' : 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          display: 'flex',
+          flexDirection: 'column',
+          background: 'var(--bg-panel)',
+        }}>
+          {!rightPanelCollapsed ? (
+            <RightPanel
+              notes={timeline.notes}
+              bpm={timeline.bpm}
+              backendAlive={backendAlive}
+              onLoadMidi={handleLoadMidi}
+              onAppendGenerated={handleAppendGenerated}
+              onExportMidi={handleExportMidi}
+              recordAudioBlob={audio.recordAudioBlob}
+            />
+          ) : (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 60, opacity: 0.6 }}>
+              <span style={{ writingMode: 'vertical-rl', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                Options
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       <style>{`

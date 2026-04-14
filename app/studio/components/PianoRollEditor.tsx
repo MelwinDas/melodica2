@@ -408,11 +408,10 @@ export default function PianoRollEditor({
   // ── Mouse handlers ───────────────────────────────────────────────────
   const getCanvasCoords = useCallback((e: React.MouseEvent): { x: number; y: number } => {
     const rect = gridCanvasRef.current?.getBoundingClientRect();
-    const scroll = gridScrollRef.current;
-    if (!rect || !scroll) return { x: 0, y: 0 };
+    if (!rect) return { x: 0, y: 0 };
     return {
-      x: e.clientX - rect.left + scroll.scrollLeft,
-      y: e.clientY - rect.top + scroll.scrollTop,
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
     };
   }, []);
 
