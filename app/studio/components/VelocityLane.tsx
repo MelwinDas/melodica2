@@ -7,14 +7,16 @@ interface Props {
   bpm: number;
   selectedIds: Set<string>;
   onSetVelocity: (id: string, velocity: number) => void;
+  scrollRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 const LANE_H = 80;
 const BAR_MIN_W = 4;
 
-export default function VelocityLane({ notes, bpm, selectedIds, onSetVelocity }: Props) {
+export default function VelocityLane({ notes, bpm, selectedIds, onSetVelocity, scrollRef }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const internalContainerRef = useRef<HTMLDivElement>(null);
+  const container = scrollRef || internalContainerRef;
   const draggingRef = useRef<string | null>(null);
 
   const secPerBeat = 60 / bpm;
@@ -69,10 +71,15 @@ export default function VelocityLane({ notes, bpm, selectedIds, onSetVelocity }:
       const selected = selectedIds.has(note.id);
       const black = isBlackKey(note.midi);
 
+      const isUnselectedBackground = selectedIds.size > 0 && !selected;
+
       const grad = ctx.createLinearGradient(x, LANE_H - barH, x, LANE_H);
       if (selected) {
         grad.addColorStop(0, 'rgba(251,191,36,0.9)');
         grad.addColorStop(1, 'rgba(217,119,6,0.7)');
+      } else if (isUnselectedBackground) {
+        grad.addColorStop(0, 'rgba(255,255,255,0.08)');
+        grad.addColorStop(1, 'rgba(255,255,255,0.02)');
       } else if (black) {
         grad.addColorStop(0, 'rgba(192,132,252,0.8)');
         grad.addColorStop(1, 'rgba(126,34,206,0.5)');
@@ -87,16 +94,18 @@ export default function VelocityLane({ notes, bpm, selectedIds, onSetVelocity }:
       ctx.fill();
 
       // Top cap
-      ctx.fillStyle = selected ? '#fde68a' : black ? '#e9d5ff' : '#a7f3d0';
+      ctx.fillStyle = selected ? '#fde68a' : isUnselectedBackground ? 'rgba(255,255,255,0.1)' : black ? '#e9d5ff' : '#a7f3d0';
       ctx.fillRect(x + 1, LANE_H - barH, nw, 2);
-    }
 
-    // Label
-    ctx.fillStyle = 'rgba(180,160,255,0.4)';
-    ctx.font = 'bold 8px sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText('VELOCITY', 6, 4);
+      // Number
+      if (nw >= 14 && !isUnselectedBackground) {
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.font = 'bold 9px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(String(note.velocity), x + 1 + nw / 2, LANE_H - barH - 2);
+      }
+    }
   }, [canvasW, totalBeats, notes, selectedIds, timeToX]);
 
   useEffect(() => { draw(); }, [draw]);
@@ -104,14 +113,18 @@ export default function VelocityLane({ notes, bpm, selectedIds, onSetVelocity }:
   // Drag handling for velocity bars
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
-    const container = containerRef.current;
-    if (!rect || !container) return;
+    if (!rect) return;
 
-    const x = e.clientX - rect.left + container.scrollLeft;
+    // x relative natively to the canvas bounds using getBoundingClientRect
+    const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    // Find which note's bar was clicked
-    for (const note of notes) {
+    // Iterate backwards so we click on notes drawn on top if overlapping
+    for (let i = notes.length - 1; i >= 0; i--) {
+      const note = notes[i];
+      // Only allow selected note editing if any are selected
+      if (selectedIds.size > 0 && !selectedIds.has(note.id)) continue;
+
       const nx = timeToX(note.time);
       const nw = Math.max(timeToX(note.time + note.duration) - nx - 2, BAR_MIN_W);
       if (x >= nx && x <= nx + nw) {
@@ -121,7 +134,7 @@ export default function VelocityLane({ notes, bpm, selectedIds, onSetVelocity }:
         return;
       }
     }
-  }, [notes, timeToX, onSetVelocity]);
+  }, [notes, timeToX, onSetVelocity, selectedIds]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!draggingRef.current) return;
@@ -138,11 +151,11 @@ export default function VelocityLane({ notes, bpm, selectedIds, onSetVelocity }:
 
   return (
     <div
-      ref={containerRef}
+      ref={container}
       style={{
-        height: LANE_H, borderTop: '1px solid var(--border)',
-        overflowX: 'auto', overflowY: 'hidden',
-        background: '#14121f', flexShrink: 0,
+        height: LANE_H,
+        overflowX: 'hidden', overflowY: 'hidden', /* we disable native scrollbar here since it's synced with the grid */
+        background: '#14121f', flex: 1,
       }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}

@@ -7,6 +7,7 @@ import {
   snapTimeToGrid, snapDurationToGrid, generateNoteId,
   DEFAULT_VELOCITY,
 } from '../lib/types';
+import VelocityLane from './VelocityLane';
 
 interface Props {
   notes: TimelineNote[];
@@ -24,6 +25,7 @@ interface Props {
   onPreviewNote: (midi: number) => void;
   playheadSeconds: number;
   isPlaying: boolean;
+  onSetVelocity?: (id: string, velocity: number) => void;
 }
 
 const MIN_PITCH = 21;   // A0
@@ -48,13 +50,14 @@ interface DragState {
 export default function PianoRollEditor({
   notes, bpm, tool, snapGrid, selectedIds, onSelectIds,
   onAddNote, onDeleteNote, onDeleteNotes, onMoveNote, onResizeNote,
-  onBulkMove, onPreviewNote, playheadSeconds, isPlaying,
+  onBulkMove, onPreviewNote, playheadSeconds, isPlaying, onSetVelocity
 }: Props) {
   const gridCanvasRef = useRef<HTMLCanvasElement>(null);
   const keysCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const gridScrollRef = useRef<HTMLDivElement>(null);
   const keysScrollRef = useRef<HTMLDivElement>(null);
+  const velocityScrollRef = useRef<HTMLDivElement>(null);
 
   const dragRef = useRef<DragState>({ mode: 'none', startX: 0, startY: 0, currentX: 0, currentY: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -83,7 +86,9 @@ export default function PianoRollEditor({
       const ny = midiToY(n.midi);
       const nw = Math.max(timeToX(n.time + n.duration) - nx, 3);
       if (x >= nx && x <= nx + nw && y >= ny && y < ny + ROW_H) {
-        const edge = x >= nx + nw - EDGE_GRAB_PX;
+        // Only allow edge dragging if note is at least 8px wide, and limit edge to 40% of the note width max.
+        const edgeThreshold = Math.min(EDGE_GRAB_PX, nw * 0.4);
+        const edge = nw >= 8 && x >= nx + nw - edgeThreshold;
         return { noteId: n.id, edge };
       }
     }
@@ -280,7 +285,7 @@ export default function PianoRollEditor({
       ctx.fillRect(xStart + 0.5, y + 1, 2, nh);
 
       // Label
-      if (nw > 16 && nh >= 8) {
+      if (nw > 24 && nh >= 10) {
         const noteName = midiToNoteName(note.midi);
         ctx.fillStyle = selected ? 'rgba(120,53,15,0.9)' : black ? 'rgba(255,255,255,0.92)' : 'rgba(0,40,20,0.85)';
         ctx.font = `bold ${Math.min(nh - 3, 9)}px sans-serif`;
@@ -385,8 +390,9 @@ export default function PianoRollEditor({
 
   // Scroll sync
   const onGridScroll = useCallback(() => {
-    if (keysScrollRef.current && gridScrollRef.current) {
-      keysScrollRef.current.scrollTop = gridScrollRef.current.scrollTop;
+    if (gridScrollRef.current) {
+      if (keysScrollRef.current) keysScrollRef.current.scrollTop = gridScrollRef.current.scrollTop;
+      if (velocityScrollRef.current) velocityScrollRef.current.scrollLeft = gridScrollRef.current.scrollLeft;
     }
   }, []);
   const onKeysScroll = useCallback(() => {
@@ -502,28 +508,34 @@ export default function PianoRollEditor({
     if (drag.mode === 'move' && drag.noteId && drag.origMidi !== undefined && drag.origTime !== undefined) {
       const dx = drag.currentX - drag.startX;
       const dy = drag.currentY - drag.startY;
-      const deltaTime = xToTime(dx);
-      const deltaMidi = -Math.round(dy / ROW_H);
+      const isSignificantMove = Math.abs(dx) > 2 || Math.abs(dy) > ROW_H / 2;
 
-      if (selectedIds.has(drag.noteId) && selectedIds.size > 1) {
-        if (Math.abs(deltaTime) > 0.001 || deltaMidi !== 0) {
-          onBulkMove(selectedIds, deltaMidi, snapTimeToGrid(deltaTime, snapGrid, secPerBeat));
-        }
-      } else {
-        const newTime = snapTimeToGrid(Math.max(0, drag.origTime + deltaTime), snapGrid, secPerBeat);
-        const newMidi = Math.max(MIN_PITCH, Math.min(MAX_PITCH, drag.origMidi + deltaMidi));
-        if (newTime !== drag.origTime || newMidi !== drag.origMidi) {
-          onMoveNote(drag.noteId, newMidi, newTime);
+      if (isSignificantMove) {
+        const deltaTime = xToTime(dx);
+        const deltaMidi = -Math.round(dy / ROW_H);
+
+        if (selectedIds.has(drag.noteId) && selectedIds.size > 1) {
+          if (Math.abs(deltaTime) > 0.001 || deltaMidi !== 0) {
+            onBulkMove(selectedIds, deltaMidi, snapTimeToGrid(deltaTime, snapGrid, secPerBeat));
+          }
+        } else {
+          const newTime = snapTimeToGrid(Math.max(0, drag.origTime + deltaTime), snapGrid, secPerBeat);
+          const newMidi = Math.max(MIN_PITCH, Math.min(MAX_PITCH, drag.origMidi + deltaMidi));
+          if (newTime !== drag.origTime || newMidi !== drag.origMidi) {
+            onMoveNote(drag.noteId, newMidi, newTime);
+          }
         }
       }
     }
 
     if (drag.mode === 'resize' && drag.noteId && drag.origDuration !== undefined) {
       const dx = drag.currentX - drag.startX;
-      const deltaTime = xToTime(dx);
-      const newDur = snapDurationToGrid(Math.max(0.01, drag.origDuration + deltaTime), snapGrid, secPerBeat);
-      if (newDur !== drag.origDuration) {
-        onResizeNote(drag.noteId, newDur);
+      if (Math.abs(dx) > 2) {
+        const deltaTime = xToTime(dx);
+        const newDur = snapDurationToGrid(Math.max(0.01, drag.origDuration + deltaTime), snapGrid, secPerBeat);
+        if (newDur !== drag.origDuration) {
+          onResizeNote(drag.noteId, newDur);
+        }
       }
     }
 
@@ -601,8 +613,10 @@ export default function PianoRollEditor({
   }, [selectedIds, onDeleteNotes, onSelectIds]);
 
   return (
-    <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-      {/* Fixed piano keys */}
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* Top half: Keys + Grid */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* Fixed piano keys */}
       <div
         ref={keysScrollRef}
         onScroll={onKeysScroll}
@@ -630,6 +644,23 @@ export default function PianoRollEditor({
             style={{ position: 'absolute', top: 0, left: 0, width: gridW, height: canvasH, pointerEvents: 'none' }}
           />
         </div>
+      </div>
+      </div>
+
+      {/* Bottom half: Velocity */}
+      <div style={{ display: 'flex', height: 80, borderTop: '1px solid var(--border)', background: '#14121f' }}>
+        <div style={{ width: KEY_W, flexShrink: 0, borderRight: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.3)', letterSpacing: 1 }}>VELOCITY</span>
+        </div>
+        {onSetVelocity && (
+          <VelocityLane 
+            notes={notes} 
+            bpm={bpm} 
+            selectedIds={selectedIds} 
+            onSetVelocity={onSetVelocity} 
+            scrollRef={velocityScrollRef} 
+          />
+        )}
       </div>
     </div>
   );

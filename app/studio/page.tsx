@@ -13,7 +13,6 @@ import { useAudioEngine } from './hooks/useAudioEngine';
 import TransportBar from './components/TransportBar';
 import Toolbar from './components/Toolbar';
 import PianoRollEditor from './components/PianoRollEditor';
-import VelocityLane from './components/VelocityLane';
 import RightPanel from './components/RightPanel';
 
 export default function StudioPage() {
@@ -268,19 +267,10 @@ export default function StudioPage() {
                 onPreviewNote={audio.previewNote}
                 playheadSeconds={playheadSeconds}
                 isPlaying={audio.isPlaying}
+                onSetVelocity={timeline.setNoteVelocity}
               />
             )}
           </div>
-
-          {/* Velocity Lane */}
-          {timeline.notes.length > 0 && (
-            <VelocityLane
-              notes={timeline.notes}
-              bpm={timeline.bpm}
-              selectedIds={selectedIds}
-              onSetVelocity={timeline.setNoteVelocity}
-            />
-          )}
         </div>
 
         {/* Split Divider */}
