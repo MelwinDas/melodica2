@@ -141,21 +141,20 @@ export default function RightPanel({
       }
 
       let res: Response;
+      const fd = new FormData();
+      fd.append('length', String(genLength));
+      fd.append('temperature', String(temperature));
+      fd.append('top_k', String(topK));
+      fd.append('genre', String(genre));
+
       if (resolvedSeedFile) {
-        const fd = new FormData();
-        fd.append('file', resolvedSeedFile);
-        fd.append('length', String(genLength));
-        fd.append('temperature', String(temperature));
-        fd.append('top_k', String(topK));
-        fd.append('genre', String(genre));
-        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/generate-with-seed`, { method: 'POST', body: fd });
-      } else {
-        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/generate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ length: genLength, temperature, top_k: topK, genre }),
-        });
+        fd.append('seed_midi', resolvedSeedFile);
       }
+
+      res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/generate`, {
+        method: 'POST',
+        body: fd
+      });
 
       clearInterval(interval);
       if (!res.ok) throw new Error(await res.text());
