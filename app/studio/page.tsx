@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { EditTool, SnapGrid } from './lib/types';
@@ -16,7 +16,7 @@ import Toolbar from './components/Toolbar';
 import PianoRollEditor from './components/PianoRollEditor';
 import RightPanel from './components/RightPanel';
 
-export default function StudioPage() {
+function StudioPageContent() {
   // ── Core hooks ─────────────────────────────────────────────────────────
   const { pushCommand, undo, redo, canUndo, canRedo, clear: clearHistory } = useUndoRedo();
   const timeline = useTimelineState(pushCommand);
@@ -411,5 +411,17 @@ export default function StudioPage() {
         @keyframes spin { to{transform:rotate(360deg)} }
       `}</style>
     </div>
+  );
+}
+
+export default function StudioPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-primary)' }}>
+        <span className="material-symbols-rounded" style={{ fontSize: 36, color: 'var(--accent-purple)', animation: 'spin 1s linear infinite' }}>progress_activity</span>
+      </div>
+    }>
+      <StudioPageContent />
+    </Suspense>
   );
 }
