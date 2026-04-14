@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '../../lib/supabase';
 
 interface Project {
@@ -34,10 +34,13 @@ const timeAgo = (iso: string) => {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const currentFolderId = searchParams.get('folder');
   const supabase = createClient();
 
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [projects, setProjects] = useState<Project[]>([]);
+  const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -46,6 +49,13 @@ export default function DashboardPage() {
   const [showNewModal, setShowNewModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newGenre, setNewGenre] = useState('');
+  const [newProjectFolder, setNewProjectFolder] = useState('');
+  
+  // New folder modal
+  const [showFolderModal, setShowFolderModal] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [creatingFolder, setCreatingFolder] = useState(false);
+
   const [creating, setCreating] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadDragOver, setUploadDragOver] = useState(false);
@@ -56,20 +66,58 @@ export default function DashboardPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.push('/login'); return; }
 
-    const [{ data: proj }, { data: prof }] = await Promise.all([
-      supabase.from('projects').select('*').order('updated_at', { ascending: false }),
+    let projQuery = supabase.from('projects').select('*');
+    if (currentFolderId && currentFolderId !== 'sample') {
+      projQuery = projQuery.eq('folder_id', currentFolderId);
+    } else if (currentFolderId === 'sample') {
+      // For now, sample folder shows no projects or we can have a special identifier
+      // Let's assume folder_id = null for all for now, but if sample is selected we filter specifically
+      projQuery = projQuery.eq('folder_id', '00000000-0000-0000-0000-000000000000'); // Dummy
+    }
+
+    const [{ data: proj }, { data: prof }, { data: f }] = await Promise.all([
+      projQuery.order('updated_at', { ascending: false }),
       supabase.from('profiles').select('display_name').eq('id', user.id).single(),
+      supabase.from('folders').select('*').order('created_at', { ascending: false })
     ]);
     setProjects(proj ?? []);
     setProfile(prof ?? null);
+    setFolders(f ?? []);
     setLoading(false);
-  }, [supabase, router]);
+  }, [supabase, router, currentFolderId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, currentFolderId]);
+
+  useEffect(() => {
+    if (currentFolderId && currentFolderId !== 'sample') {
+      setNewProjectFolder(currentFolderId);
+    } else {
+      setNewProjectFolder('');
+    }
+  }, [currentFolderId]);
+
+  const currentFolderName = currentFolderId === 'sample' ? 'Sample Folder' : 
+                          folders.find(f => f.id === currentFolderId)?.name || 'All Projects';
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     router.push('/login');
+  };
+
+  const handleCreateFolder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFolderName.trim()) return;
+    setCreatingFolder(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { error } = await supabase.from('folders').insert({ name: newFolderName.trim(), user_id: user.id });
+      if (!error) {
+        setNewFolderName('');
+        setShowFolderModal(false);
+        load();
+      }
+    }
+    setCreatingFolder(false);
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -78,7 +126,12 @@ export default function DashboardPage() {
     setCreating(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { data } = await supabase.from('projects').insert({ name: newName.trim(), genre: newGenre || null, user_id: user.id }).select().single();
+    const { data } = await supabase.from('projects').insert({ 
+      name: newName.trim(), 
+      genre: newGenre || null, 
+      user_id: user.id,
+      folder_id: newProjectFolder || null
+    }).select().single();
 
     // If a file was uploaded, store it in localStorage for the studio page to pick up
     if (uploadFile) {
@@ -122,16 +175,13 @@ export default function DashboardPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32, flexWrap: 'wrap', gap: 16 }}>
         <div>
           <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 28, fontWeight: 800, marginBottom: 4 }}>
-            My Projects
+            {currentFolderName}
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
-            {profile?.display_name ? `Welcome back, ${profile.display_name} 👋` : 'Manage your compositions and generated tracks'}
+            {profile?.display_name ? `Welcome back, ${profile.display_name}` : 'Manage your compositions and generated tracks'}
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Link href="/studio" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '9px 16px', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600 }}>
-            <span className="material-symbols-rounded" style={{ fontSize: 16 }}>piano</span>Studio
-          </Link>
           <button onClick={() => setShowNewModal(true)}
             className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 8, border: 'none', borderRadius: 10 }}>
             <span className="material-symbols-rounded" style={{ fontSize: 18 }}>add</span>New Project
@@ -271,6 +321,16 @@ export default function DashboardPage() {
                 <input className="input-field" placeholder="e.g. Midnight Jazz Piano" value={newName} onChange={e => setNewName(e.target.value)} required autoFocus />
               </div>
               <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 8 }}>Folder (optional)</label>
+                <select className="input-field" value={newProjectFolder} onChange={e => setNewProjectFolder(e.target.value)}
+                  style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, width: '100%', padding: '10px 14px', outline: 'none', color: 'var(--text-primary)', fontSize: 13 }}>
+                  <option value="">No Folder (Root)</option>
+                  {folders.map(f => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 8 }}>Genre (optional)</label>
                 <select className="input-field" value={newGenre} onChange={e => setNewGenre(e.target.value)}
                   style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, width: '100%', padding: '10px 14px', outline: 'none', color: 'var(--text-primary)', fontSize: 13 }}>
@@ -328,6 +388,32 @@ export default function DashboardPage() {
                 <button type="submit" disabled={creating || !newName.trim()}
                   className="btn-primary" style={{ flex: 1, border: 'none', borderRadius: 10, opacity: creating || !newName.trim() ? 0.6 : 1 }}>
                   {creating ? 'Creating…' : 'Create & Open Studio'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* New Folder Modal */}
+      {showFolderModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}
+          onClick={e => { if (e.target === e.currentTarget) setShowFolderModal(false); }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: 380, padding: '36px 32px' }}>
+            <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 20, fontWeight: 800, marginBottom: 24 }}>Create New Folder</h2>
+            <form onSubmit={handleCreateFolder} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 8 }}>Folder Name</label>
+                <input className="input-field" placeholder="e.g. Orchestral Sessions" value={newFolderName} onChange={e => setNewFolderName(e.target.value)} required autoFocus />
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+                <button type="button" onClick={() => setShowFolderModal(false)}
+                  style={{ flex: 1, padding: '11px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14 }}>
+                  Cancel
+                </button>
+                <button type="submit" disabled={creatingFolder}
+                  className="btn-primary" style={{ flex: 1, border: 'none', borderRadius: 10 }}>
+                  {creatingFolder ? 'Creating…' : 'Create Folder'}
                 </button>
               </div>
             </form>

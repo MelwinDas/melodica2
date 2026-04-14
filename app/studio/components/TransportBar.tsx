@@ -34,63 +34,42 @@ export default function TransportBar({
         <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 16 }}>Melodica</span>
       </Link>
 
-      {/* Menu items */}
-      {['File', 'Edit', 'View', 'Track', 'Help'].map(item => (
-        <button key={item} style={{
-          background: 'none', border: 'none', cursor: 'pointer',
-          color: 'var(--text-secondary)', fontSize: 13, padding: '0 8px', height: 48,
-        }}
-          onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
-        >{item}</button>
-      ))}
-
-      {/* Snap to grid */}
-      <div style={{ marginLeft: 12 }}>
-        <SnapToGrid value={snapGrid} onChange={onSnapChange} />
-      </div>
+      {/* Help Button */}
+      <button style={{
+        background: 'none', border: 'none', cursor: 'pointer',
+        color: 'var(--text-secondary)', fontSize: 13, padding: '0 8px', height: 48,
+      }}
+        onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
+        onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
+      >Help</button>
 
       {/* Transport controls */}
-      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-        {/* Record */}
-        <button onClick={onRecord} title="Record" style={{
-          background: isRecording ? 'rgba(239,68,68,0.2)' : 'var(--bg-card)',
-          border: `1px solid ${isRecording ? '#ef4444' : 'var(--border)'}`,
-          borderRadius: 8, padding: '5px 10px', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', gap: 5,
-          color: isRecording ? '#ef4444' : 'var(--text-secondary)',
-        }}>
-          <span style={{
-            width: 8, height: 8, borderRadius: '50%',
-            background: isRecording ? '#ef4444' : 'var(--text-muted)',
-            animation: isRecording ? 'pulse 1s infinite' : 'none',
-          }} />
-          <span style={{ fontSize: 12, fontWeight: 600 }}>REC</span>
-        </button>
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+        {/* Play/Stop Group */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-card)', padding: '2px 8px', borderRadius: 10, border: '1px solid var(--border)' }}>
+          <button onClick={onStop} title="Stop" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
+            <span className="material-symbols-rounded" style={{ fontSize: 20 }}>stop</span>
+          </button>
+          
+          <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
 
-        {/* Stop */}
-        <button onClick={onStop} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-          <span className="material-symbols-rounded" style={{ fontSize: 22 }}>stop</span>
-        </button>
-
-        {/* Play/Pause */}
-        <button onClick={onPlay} style={{
-          background: 'var(--accent-purple)', border: 'none', borderRadius: 8,
-          padding: '5px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
-          color: 'white', fontWeight: 700, fontSize: 13,
-        }}>
-          <span className="material-symbols-rounded" style={{ fontSize: 18 }}>
-            {isPlaying ? 'pause' : 'play_arrow'}
-          </span>
-          {isPlaying ? 'Pause' : 'Play'}
-        </button>
+          <button onClick={onPlay} style={{
+            background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+            color: 'var(--accent-purple-light)', fontWeight: 700, fontSize: 13,
+          }}>
+            <span className="material-symbols-rounded" style={{ fontSize: 22 }}>
+              {isPlaying ? 'pause' : 'play_arrow'}
+            </span>
+            {isPlaying ? 'PAUSE' : 'PLAY'}
+          </button>
+        </div>
 
         {/* BPM */}
         <div style={{
-          background: 'var(--bg-card)', borderRadius: 8, padding: '4px 12px',
+          background: 'var(--bg-card)', borderRadius: 10, padding: '5px 12px',
           display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--border)',
         }}>
-          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>BPM</span>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700 }}>BPM</span>
           <input
             type="number" value={bpm}
             onChange={e => onBpmChange(Number(e.target.value))}
@@ -102,18 +81,19 @@ export default function TransportBar({
           />
         </div>
 
-        {/* Backend status */}
+        {/* Backend status indicator */}
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 5,
-          padding: '4px 10px', background: 'var(--bg-card)',
-          border: '1px solid var(--border)', borderRadius: 8,
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '5px 12px', background: 'var(--bg-card)',
+          border: '1px solid var(--border)', borderRadius: 10,
         }}>
           <div style={{
-            width: 6, height: 6, borderRadius: '50%',
+            width: 7, height: 7, borderRadius: '50%',
             background: backendAlive === null ? '#6b6890' : backendAlive ? '#10b981' : '#ef4444',
+            boxShadow: backendAlive ? '0 0 8px rgba(16,185,129,0.4)' : 'none',
           }} />
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-            {backendAlive ? 'AI Ready' : 'AI Offline'}
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>
+            {backendAlive ? 'AI READY' : 'AI OFFLINE'}
           </span>
         </div>
       </div>
