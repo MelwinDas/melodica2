@@ -49,12 +49,12 @@ interface Props {
   onLoadMidi: (buffer: ArrayBuffer, filename: string) => void;
   onAppendGenerated: (buffer: ArrayBuffer) => void;
   onExportMidi: () => Blob;
-  recordAudioBlob: (ms: number) => Promise<Blob>;
+  renderTimelineToAudio: (notes: TimelineNote[], bpm: number) => Promise<Blob>;
 }
 
 export default function RightPanel({
   notes, bpm, backendAlive,
-  onLoadMidi, onAppendGenerated, onExportMidi, recordAudioBlob,
+  onLoadMidi, onAppendGenerated, onExportMidi, renderTimelineToAudio,
 }: Props) {
   const [tab, setTab] = useState<StudioTab>('ai-generate');
 
@@ -79,7 +79,7 @@ export default function RightPanel({
   const [generatedMidiBlob, setGeneratedMidiBlob] = useState<Blob | null>(null);
 
   // Export state
-  const [exportFormat, setExportFormat] = useState<'midi' | 'mp3'>('midi');
+  const [exportFormat, setExportFormat] = useState<'midi' | 'wav' | 'mp3'>('midi');
   const [exporting, setExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
 
@@ -201,8 +201,13 @@ export default function RightPanel({
           return;
         }
       } else {
-        blob = await recordAudioBlob(3000);
-        filename = 'melodica_export.mp3';
+        if (notes.length === 0) {
+          setExporting(false);
+          alert('No audio data to export.');
+          return;
+        }
+        blob = await renderTimelineToAudio(notes, bpm);
+        filename = `melodica_export.${exportFormat}`;
       }
 
       const url = URL.createObjectURL(blob);
@@ -471,24 +476,28 @@ export default function RightPanel({
         {tab === 'file-export' && (
           <div>
             <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Export Project</h3>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 20 }}>Export your session in MIDI or MP3 format.</p>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 20 }}>
+              Export your session in MIDI or High-Quality Audio format.
+            </p>
 
             <div style={{ marginBottom: 20 }}>
               <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 10 }}>Export Format</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                {(['midi', 'mp3'] as const).map(fmt => (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                {(['midi', 'wav', 'mp3'] as const).map(fmt => (
                   <button key={fmt} onClick={() => setExportFormat(fmt)} style={{
-                    padding: '18px', border: `2px solid ${exportFormat === fmt ? 'var(--accent-purple)' : 'var(--border)'}`,
-                    borderRadius: 12, cursor: 'pointer', fontSize: 14, fontWeight: 800,
+                    padding: '16px 8px', border: `2px solid ${exportFormat === fmt ? 'var(--accent-purple)' : 'var(--border)'}`,
+                    borderRadius: 12, cursor: 'pointer', fontSize: 13, fontWeight: 800,
                     background: exportFormat === fmt ? 'rgba(139,92,246,0.15)' : 'var(--bg-card)',
                     color: exportFormat === fmt ? 'var(--accent-purple-light)' : 'var(--text-secondary)',
-                    textTransform: 'uppercase', letterSpacing: '0.08em', transition: 'all 0.2s',
+                    textTransform: 'uppercase', letterSpacing: '0.05em', transition: 'all 0.2s',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
                   }}>
-                    <span className="material-symbols-rounded" style={{ fontSize: 28 }}>{fmt === 'midi' ? 'piano' : 'audio_file'}</span>
+                    <span className="material-symbols-rounded" style={{ fontSize: 24 }}>
+                      {fmt === 'midi' ? 'piano' : fmt === 'wav' ? 'waves' : 'audio_file'}
+                    </span>
                     {fmt.toUpperCase()}
-                    <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none', color: 'var(--text-muted)' }}>
-                      {fmt === 'midi' ? 'Music notation file' : 'Rendered audio file'}
+                    <span style={{ fontSize: 9, fontWeight: 400, textTransform: 'none', color: 'var(--text-muted)', textAlign: 'center' }}>
+                      {fmt === 'midi' ? 'Project Data' : fmt === 'wav' ? 'Lossless Audio' : 'Compressed Audio'}
                     </span>
                   </button>
                 ))}

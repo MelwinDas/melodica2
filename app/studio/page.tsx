@@ -372,7 +372,7 @@ export default function StudioPage() {
               onLoadMidi={handleLoadMidi}
               onAppendGenerated={handleAppendGenerated}
               onExportMidi={handleExportMidi}
-              recordAudioBlob={audio.recordAudioBlob}
+              renderTimelineToAudio={audio.renderTimelineToAudio}
             />
           ) : (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 60, opacity: 0.6 }}>
