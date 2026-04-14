@@ -123,6 +123,13 @@ export function useAudioEngine() {
     } catch { /* ignore */ }
   }, []);
 
+  const seek = useCallback(async (seconds: number) => {
+    try {
+      const Tone = await import('tone');
+      Tone.getTransport().seconds = seconds;
+    } catch { /* ignore */ }
+  }, []);
+
   // Preview a single note (for pencil tool feedback)
   const previewNote = useCallback(async (midi: number, duration = 0.2) => {
     try {
@@ -184,6 +191,6 @@ export function useAudioEngine() {
   return {
     isPlaying, play, pause, stop, resume,
     previewNote, recordAudioBlob, notesToMidiBlob,
-    setPlaybackBpm, transportRef,
+    setPlaybackBpm, seek, transportRef,
   };
 }

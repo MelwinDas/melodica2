@@ -10,6 +10,7 @@ export interface TimelineState {
   notes: TimelineNote[];
   bpm: number;
   timeSignature: [number, number];
+  generationBoundary?: number;
 }
 
 export type SnapGrid = '1/4' | '1/8' | '1/16' | '1/32' | 'off';

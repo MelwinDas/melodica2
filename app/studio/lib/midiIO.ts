@@ -68,16 +68,18 @@ export function appendMidiToTimeline(
 ): TimelineState {
   const incoming = parseMidiToTimeline(incomingBuffer);
   const endTime = getTimelineEndTime(existing);
+  const firstIncomingTime = incoming.notes.length > 0 ? incoming.notes[0].time : 0;
 
   const offsetNotes: TimelineNote[] = incoming.notes.map(n => ({
     ...n,
     id: generateNoteId(),
-    time: n.time + endTime,
+    time: (n.time - firstIncomingTime) + endTime,
   }));
 
   return {
     ...existing,
     notes: [...existing.notes, ...offsetNotes],
+    generationBoundary: endTime > 0 && offsetNotes.length > 0 ? endTime : undefined,
   };
 }
 

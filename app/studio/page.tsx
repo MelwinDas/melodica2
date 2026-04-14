@@ -158,13 +158,19 @@ export default function StudioPage() {
         timeline.bpm,
         (seconds) => setPlayheadSeconds(seconds),
         () => setPlayheadSeconds(0),
+        playheadSeconds
       );
     }
-  }, [audio, timeline.notes, timeline.bpm]);
+  }, [audio, timeline.notes, timeline.bpm, playheadSeconds]);
 
   const handleStop = useCallback(async () => {
     await audio.stop();
     setPlayheadSeconds(0);
+  }, [audio]);
+
+  const handleSeek = useCallback((seconds: number) => {
+    setPlayheadSeconds(seconds);
+    audio.seek(seconds);
   }, [audio]);
 
   const handleRecord = useCallback(() => {
@@ -192,6 +198,20 @@ export default function StudioPage() {
     return timelineToMidiBlob(timeline.getState());
   }, [timeline]);
 
+  // ── View Sheet Music ───────────────────────────────────────────────────
+  const handleViewSheetMusic = useCallback(async () => {
+    if (timeline.notes.length === 0) return;
+    try {
+      const blob = handleExportMidi();
+      const buf = await blob.arrayBuffer();
+      const { storeMidiInLocalStorage } = await import('./lib/midiIO');
+      storeMidiInLocalStorage(buf, 'studio_preview.mid');
+      window.open('/sheet-music', '_blank');
+    } catch (e) {
+      console.error(e);
+    }
+  }, [timeline.notes.length, handleExportMidi]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg-primary)' }}>
       {/* Top transport bar */}
@@ -205,7 +225,10 @@ export default function StudioPage() {
         onPlay={handlePlayToggle}
         onStop={handleStop}
         onRecord={handleRecord}
-        onBpmChange={timeline.setBpm}
+        onBpmChange={(b) => {
+          timeline.setBpm(b);
+          audio.setPlaybackBpm(b);
+        }}
       />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -239,6 +262,7 @@ export default function StudioPage() {
             canRedo={canRedo}
             onUndo={undo}
             onRedo={redo}
+            onViewSheetMusic={handleViewSheetMusic}
           />
 
           {/* Piano Roll */}
@@ -266,8 +290,10 @@ export default function StudioPage() {
                 onBulkMove={timeline.bulkMove}
                 onPreviewNote={audio.previewNote}
                 playheadSeconds={playheadSeconds}
+                onSetPlayhead={handleSeek}
                 isPlaying={audio.isPlaying}
                 onSetVelocity={timeline.setNoteVelocity}
+                generationBoundary={timeline.generationBoundary}
               />
             )}
           </div>

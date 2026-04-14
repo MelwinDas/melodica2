@@ -134,8 +134,8 @@ export default function RightPanel({
 
     try {
       // Serialize current timeline as seed if we have notes
-      let resolvedSeedFile: File | Blob | null = seedFile;
-      if (!resolvedSeedFile && notes.length > 0) {
+      let resolvedSeedFile: File | Blob | null = null;
+      if (notes.length > 0) {
         const blob = timelineToMidiBlob({ notes, bpm, timeSignature: [4, 4] });
         resolvedSeedFile = new File([blob], 'timeline_seed.mid', { type: 'audio/midi' });
       }
@@ -309,40 +309,7 @@ export default function RightPanel({
               </div>
             </div>
 
-            {/* Seed file */}
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 8 }}>
-                Seed MIDI File <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional — timeline used if empty)</span>
-              </label>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button onClick={() => seedFileRef.current?.click()} style={{
-                  flex: 1, padding: '9px 14px', background: 'var(--bg-card)',
-                  border: `1px solid ${seedFile ? 'var(--accent-teal)' : 'var(--border)'}`,
-                  borderRadius: 8, cursor: 'pointer',
-                  color: seedFile ? 'var(--accent-teal-light)' : 'var(--text-secondary)',
-                  fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden',
-                }}>
-                  <span className="material-symbols-rounded" style={{ fontSize: 15, flexShrink: 0 }}>
-                    {seedFile ? 'audio_file' : 'upload_file'}
-                  </span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {seedFile ? seedFile.name : 'Select .mid file…'}
-                  </span>
-                </button>
-                {seedFile && (
-                  <button onClick={() => setSeedFile(null)} style={{
-                    padding: '9px 10px', background: 'rgba(239,68,68,0.1)',
-                    border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8,
-                    cursor: 'pointer', color: '#f87171', fontSize: 12,
-                  }}>
-                    <span className="material-symbols-rounded" style={{ fontSize: 15 }}>close</span>
-                  </button>
-                )}
-              </div>
-              <input ref={seedFileRef} type="file" accept=".mid,.midi" style={{ display: 'none' }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) setSeedFile(f); e.target.value = ''; }}
-              />
-            </div>
+
 
             {/* Progress */}
             {generating && (

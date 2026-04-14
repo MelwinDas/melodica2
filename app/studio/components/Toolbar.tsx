@@ -8,6 +8,7 @@ interface Props {
   canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
+  onViewSheetMusic: () => void;
 }
 
 const TOOLS: { id: EditTool; icon: string; label: string; hint: string }[] = [
@@ -16,7 +17,7 @@ const TOOLS: { id: EditTool; icon: string; label: string; hint: string }[] = [
   { id: 'eraser', icon: 'ink_eraser', label: 'Eraser', hint: 'Click to delete' },
 ];
 
-export default function Toolbar({ tool, onToolChange, canUndo, canRedo, onUndo, onRedo }: Props) {
+export default function Toolbar({ tool, onToolChange, canUndo, canRedo, onUndo, onRedo, onViewSheetMusic }: Props) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 8,
@@ -80,6 +81,21 @@ export default function Toolbar({ tool, onToolChange, canUndo, canRedo, onUndo, 
           Redo
         </button>
       </div>
+
+      <div style={{ flex: 1 }} />
+
+      {/* View Sheet Music */}
+      <button
+        onClick={onViewSheetMusic}
+        style={{
+          padding: '5px 12px', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer',
+          background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)',
+          display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600,
+        }}
+      >
+        <span className="material-symbols-rounded" style={{ fontSize: 14 }}>library_music</span>
+        Full Sheet Music
+      </button>
     </div>
   );
 }

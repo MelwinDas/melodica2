@@ -6,6 +6,7 @@ export function useTimelineState(undoPush: (cmd: Command) => void) {
   const [notes, setNotes] = useState<TimelineNote[]>([]);
   const [bpm, setBpmState] = useState(120);
   const [timeSignature] = useState<[number, number]>([4, 4]);
+  const [generationBoundary, setGenerationBoundary] = useState<number | undefined>(undefined);
 
   // Keep a ref in sync for non-React reads (canvas animation)
   const notesRef = useRef<TimelineNote[]>([]);
@@ -25,6 +26,7 @@ export function useTimelineState(undoPush: (cmd: Command) => void) {
   const loadTimeline = useCallback((state: TimelineState) => {
     updateNotes(state.notes);
     setBpm(state.bpm);
+    setGenerationBoundary(state.generationBoundary);
   }, [updateNotes, setBpm]);
 
   // Append notes from an external source at a given offset
@@ -149,13 +151,14 @@ export function useTimelineState(undoPush: (cmd: Command) => void) {
     notes: notesRef.current,
     bpm: bpmRef.current,
     timeSignature,
-  }), [timeSignature]);
+    generationBoundary,
+  }), [timeSignature, generationBoundary]);
 
   return {
     notes, bpm, timeSignature, notesRef, bpmRef,
     loadTimeline, appendNotes, setBpm,
     addNote, deleteNote, deleteNotes,
     moveNote, resizeNote, setNoteVelocity,
-    bulkMove, getEndTime, getState,
+    bulkMove, getEndTime, getState, generationBoundary
   };
 }

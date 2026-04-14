@@ -25,7 +25,9 @@ interface Props {
   onPreviewNote: (midi: number) => void;
   playheadSeconds: number;
   isPlaying: boolean;
+  onSetPlayhead?: (seconds: number) => void;
   onSetVelocity?: (id: string, velocity: number) => void;
+  generationBoundary?: number;
 }
 
 const MIN_PITCH = 21;   // A0
@@ -33,7 +35,7 @@ const MAX_PITCH = 108;  // C8
 const PITCH_RANGE = MAX_PITCH - MIN_PITCH + 1;
 const EDGE_GRAB_PX = 8;
 
-type DragMode = 'none' | 'move' | 'resize' | 'marquee';
+type DragMode = 'none' | 'move' | 'resize' | 'marquee' | 'scrub';
 
 interface DragState {
   mode: DragMode;
@@ -50,7 +52,8 @@ interface DragState {
 export default function PianoRollEditor({
   notes, bpm, tool, snapGrid, selectedIds, onSelectIds,
   onAddNote, onDeleteNote, onDeleteNotes, onMoveNote, onResizeNote,
-  onBulkMove, onPreviewNote, playheadSeconds, isPlaying, onSetVelocity
+  onBulkMove, onPreviewNote, playheadSeconds, isPlaying, onSetPlayhead, onSetVelocity,
+  generationBoundary
 }: Props) {
   const gridCanvasRef = useRef<HTMLCanvasElement>(null);
   const keysCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -244,6 +247,31 @@ export default function PianoRollEditor({
       ctx.beginPath(); ctx.moveTo(x, RULER_H); ctx.lineTo(x, canvasH); ctx.stroke();
     }
 
+    // Generation Boundary
+    if (generationBoundary !== undefined) {
+      const bx = timeToX(generationBoundary);
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.8)'; // amber
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(bx, RULER_H);
+      ctx.lineTo(bx, canvasH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      
+      // Label
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.9)';
+      ctx.beginPath();
+      ctx.roundRect(bx - 35, 4, 70, 14, [4,4,4,4]);
+      ctx.fill();
+      
+      ctx.fillStyle = '#111';
+      ctx.font = 'bold 8px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('AI BEGINS', bx, 11);
+    }
+
     // ── Note blocks ──────────────────────────────────────────────────────
     for (const note of notes) {
       const rowIdx = MAX_PITCH - note.midi;
@@ -424,7 +452,14 @@ export default function PianoRollEditor({
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button === 2) return; // right click handled by context menu
     const { x, y } = getCanvasCoords(e);
-    if (y < RULER_H) return;
+    if (y < RULER_H) {
+      if (onSetPlayhead) {
+        onSetPlayhead(Math.max(0, xToTime(x)));
+        dragRef.current = { mode: 'scrub', startX: x, startY: y, currentX: x, currentY: y };
+        setIsDragging(true);
+      }
+      return;
+    }
 
     const hit = hitTest(x, y);
 
@@ -482,7 +517,8 @@ export default function PianoRollEditor({
       const hit = hitTest(x, y);
       const el = gridScrollRef.current;
       if (el) {
-        if (tool === 'eraser') el.style.cursor = 'crosshair';
+        if (y < RULER_H) el.style.cursor = 'text';
+        else if (tool === 'eraser') el.style.cursor = 'crosshair';
         else if (tool === 'pencil') el.style.cursor = hit ? (hit.edge ? 'ew-resize' : 'move') : 'crosshair';
         else if (hit) el.style.cursor = hit.edge ? 'ew-resize' : 'move';
         else el.style.cursor = 'crosshair';
@@ -494,11 +530,16 @@ export default function PianoRollEditor({
     dragRef.current.currentX = x;
     dragRef.current.currentY = y;
 
+    // Execute scrub
+    if (dragRef.current.mode === 'scrub') {
+      if (onSetPlayhead) onSetPlayhead(Math.max(0, xToTime(x)));
+    }
+
     // Redraw overlay for marquee
-    if (dragRef.current.mode === 'marquee') {
+    if (dragRef.current.mode === 'marquee' || dragRef.current.mode === 'scrub') {
       drawOverlay();
     }
-  }, [isDragging, getCanvasCoords, hitTest, tool, drawOverlay]);
+  }, [isDragging, getCanvasCoords, hitTest, tool, drawOverlay, onSetPlayhead, xToTime]);
 
   const handleMouseUp = useCallback(() => {
     if (!isDragging) return;
