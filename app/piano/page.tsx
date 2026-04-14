@@ -37,14 +37,28 @@ export default function PianoPage() {
       'a':0,'w':1,'s':2,'e':3,'d':4,'f':5,'t':6,'g':7,'y':8,'h':9,'u':10,'j':11,'k':12,'o':13,'l':14,
     };
     const baseOct = 4;
+    const pressedCodes = new Map<string, number>();
+
     const onDown = (e: KeyboardEvent) => {
       if (['INPUT','SELECT','TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
-      const semi = QWERTY[e.key.toLowerCase()];
-      if (semi !== undefined) setPressedKeys(prev => new Set(prev).add(String(semi + (baseOct+1)*12)));
+      const key = e.key.toLowerCase();
+      if (pressedCodes.has(key)) return;
+      const semi = QWERTY[key];
+      if (semi !== undefined) {
+        const capsOn = e.getModifierState('CapsLock');
+        const oct = capsOn ? 2 : baseOct;
+        const midi = semi + (oct + 1) * 12;
+        pressedCodes.set(key, midi);
+        setPressedKeys(prev => new Set(prev).add(String(midi)));
+      }
     };
     const onUp = (e: KeyboardEvent) => {
-      const semi = QWERTY[e.key.toLowerCase()];
-      if (semi !== undefined) setPressedKeys(prev => { const s = new Set(prev); s.delete(String(semi + (baseOct+1)*12)); return s; });
+      const key = e.key.toLowerCase();
+      const midi = pressedCodes.get(key);
+      if (midi !== undefined) {
+        setPressedKeys(prev => { const s = new Set(prev); s.delete(String(midi)); return s; });
+        pressedCodes.delete(key);
+      }
     };
     window.addEventListener('keydown', onDown);
     window.addEventListener('keyup',   onUp);
@@ -146,8 +160,8 @@ export default function PianoPage() {
         {/* MAIN STAGE */}
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '12px 16px', gap: 12, overflow: 'hidden' }}>
 
-          {/* Sheet Music — upper ~60% */}
-          <div style={{ flex: 3, minHeight: 0 }}>
+          {/* Sheet Music — take all available flex-1 space and scroll internally */}
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <SheetMusicStage
               tracks={engine.tracks}
               liveNotes={engine.liveNotes}
@@ -161,8 +175,8 @@ export default function PianoPage() {
             />
           </div>
 
-          {/* Virtual Piano — lower ~40% */}
-          <div style={{ flex: 2, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto' }}>
+          {/* Virtual Piano — fixed to bottom, doesn't shrink natively */}
+          <div style={{ flexShrink: 0, width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
             <VirtualPiano
               pressedKeys={pressedKeys}
               onNoteOn={handleNoteOn}

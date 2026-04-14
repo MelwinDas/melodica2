@@ -412,25 +412,29 @@ export function usePianoEngine() {
   }, [snapTime]);
 
   useEffect(() => {
-    const pressed = new Set<string>();
+    const pressedCodes = new Map<string, number>();
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT','SELECT','TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
       const key = e.key.toLowerCase();
-      if (pressed.has(key)) return;
-      pressed.add(key);
+      if (pressedCodes.has(key)) return;
+      
       const semi = QWERTY_MAP[key];
       if (semi !== undefined) {
         e.preventDefault();
-        noteOn(semi + (baseOctaveRef.current + 1) * 12, 82);
+        const capsOn = e.getModifierState('CapsLock');
+        const oct = capsOn ? 2 : baseOctaveRef.current;
+        const midi = semi + (oct + 1) * 12;
+        pressedCodes.set(key, midi);
+        noteOn(midi, 82);
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
-      pressed.delete(key);
-      const semi = QWERTY_MAP[key];
-      if (semi !== undefined) {
+      const midi = pressedCodes.get(key);
+      if (midi !== undefined) {
         e.preventDefault();
-        noteOff(semi + (baseOctaveRef.current + 1) * 12);
+        noteOff(midi);
+        pressedCodes.delete(key);
       }
     };
     window.addEventListener('keydown', handleKeyDown);

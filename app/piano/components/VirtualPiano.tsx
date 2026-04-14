@@ -3,7 +3,7 @@ import { useState, useCallback } from 'react';
 
 const WHITE_NOTES = ['C','D','E','F','G','A','B'];
 const BLACK_MAP: Record<number, string> = { 0:'C#', 1:'D#', 3:'F#', 4:'G#', 5:'A#' };
-const OCTAVES = [3, 4, 5];
+const OCTAVES = [2, 3, 4, 5, 6];
 const WHITE_KEY_H = 140;
 const BLACK_KEY_H = 86;
 
@@ -54,6 +54,7 @@ export default function VirtualPiano({ pressedKeys, onNoteOn, onNoteOff }: Props
       background: 'var(--bg-secondary)', borderRadius: 14,
       border: '1px solid var(--border-light)', padding: '12px 16px 10px',
       display: 'flex', flexDirection: 'column', alignItems: 'center',
+      width: '100%', maxWidth: '100%'
     }}>
       {/* Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10, width: '100%', justifyContent: 'center' }}>
@@ -77,7 +78,11 @@ export default function VirtualPiano({ pressedKeys, onNoteOn, onNoteOff }: Props
       </div>
 
       {/* Keyboard */}
-      <div style={{ display: 'flex', gap: 0, position: 'relative', userSelect: 'none' }}>
+      <div style={{ 
+        display: 'flex', gap: 0, position: 'relative', userSelect: 'none', 
+        width: '100%', overflowX: 'auto', paddingBottom: 8, 
+      }}>
+        <div style={{ display: 'flex', minWidth: 'max-content', margin: '0 auto' }}>
         {OCTAVES.map(oct =>
           WHITE_NOTES.map((note, i) => {
             const midi   = noteToMidi(note, oct);
@@ -150,6 +155,7 @@ export default function VirtualPiano({ pressedKeys, onNoteOn, onNoteOff }: Props
             );
           })
         )}
+        </div>
       </div>
     </div>
   );
