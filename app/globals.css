@@ -13,6 +13,7 @@
   --accent-teal: #14b8a6;
   --accent-teal-light: #2dd4bf;
   --accent-pink: #ec4899;
+  --accent-gold: #f59e0b;
   --text-primary: #f1f0ff;
   --text-secondary: #a09aba;
   --text-muted: #5f5c7a;
@@ -20,6 +21,10 @@
   --border-light: #3a3a55;
   --glow-purple: 0 0 40px rgba(139,92,246,0.25);
   --glow-teal: 0 0 40px rgba(20,184,166,0.2);
+  --sidebar-w: 156px;
+  --header-h: 56px;
+  --footer-h: 72px;
+  --neon-blue: #00d4ff;
 }
 
 * {
@@ -41,8 +46,6 @@ body {
 }
 
 /* ── Layout centring ─────────────────────────────────────────────────── */
-/* Ensures every page-level section is horizontally centered with
-   consistent max-width and padding. Works alongside Tailwind classes. */
 .page-container {
   max-width: 1280px;
   margin-left: auto;
@@ -345,4 +348,264 @@ code {
   border-radius: 4px;
   padding: 1px 5px;
   color: var(--accent-teal-light);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Z-PATTERN PIANO STUDIO — New Styles
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Keyframe Animations ────────────────────────────────────────────── */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes metronome-flash {
+  0% { opacity: 1; box-shadow: 0 0 12px var(--accent-gold), 0 0 24px var(--accent-gold); }
+  100% { opacity: 0.15; box-shadow: none; }
+}
+
+@keyframes glow-key-press {
+  0% { box-shadow: 0 0 8px rgba(139,92,246,0.6), 0 0 20px rgba(236,72,153,0.3); }
+  50% { box-shadow: 0 0 20px rgba(139,92,246,0.8), 0 0 40px rgba(236,72,153,0.5); }
+  100% { box-shadow: 0 0 8px rgba(139,92,246,0.6), 0 0 20px rgba(236,72,153,0.3); }
+}
+
+@keyframes playhead-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes countIn-flash {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); }
+  100% { transform: scale(1); opacity: 0.3; }
+}
+
+/* ── LCD Digital Display ────────────────────────────────────────────── */
+.lcd-display {
+  font-family: 'Space Grotesk', monospace;
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.06em;
+  color: #c4ff6b;
+  background: #0c0c14;
+  border: 1px solid #2a2a3a;
+  border-radius: 6px;
+  padding: 4px 14px;
+  text-shadow: 0 0 8px rgba(196, 255, 107, 0.4);
+  min-width: 130px;
+  text-align: center;
+  user-select: none;
+}
+
+/* ── Transport Button ───────────────────────────────────────────────── */
+.transport-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+  min-width: 38px;
+  min-height: 34px;
+}
+
+.transport-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-purple);
+  color: var(--text-primary);
+}
+
+.transport-btn.active {
+  background: rgba(139,92,246,0.2);
+  border-color: var(--accent-purple);
+  color: var(--accent-purple-light);
+}
+
+.transport-btn.record {
+  color: #ef4444;
+  border-color: rgba(239,68,68,0.3);
+}
+
+.transport-btn.record.active {
+  background: rgba(239,68,68,0.2);
+  border-color: #ef4444;
+}
+
+.transport-btn.play-btn {
+  background: var(--accent-purple);
+  border-color: var(--accent-purple);
+  color: white;
+  padding: 6px 16px;
+}
+
+.transport-btn.play-btn:hover {
+  filter: brightness(1.15);
+  box-shadow: 0 4px 16px rgba(139,92,246,0.4);
+}
+
+/* ── Sidebar Glass ──────────────────────────────────────────────────── */
+.sidebar-glass {
+  background: rgba(17, 17, 24, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-right: 1px solid var(--border);
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px;
+  gap: 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ── Metronome LED ──────────────────────────────────────────────────── */
+.metro-led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-gold);
+  opacity: 0.15;
+  transition: opacity 0.05s;
+}
+
+.metro-led.flash {
+  animation: metronome-flash 0.15s ease-out;
+}
+
+/* ── Velocity Meter ─────────────────────────────────────────────────── */
+.velocity-meter {
+  width: 100%;
+  height: 120px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.velocity-meter-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, var(--accent-purple), var(--accent-pink));
+  transition: height 0.1s ease;
+  border-radius: 0 0 7px 7px;
+}
+
+/* ── Shadow Piano Roll ──────────────────────────────────────────────── */
+.shadow-roll {
+  opacity: 0.2;
+  background: #0d0c18;
+  border-top: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.shadow-roll-note {
+  position: absolute;
+  background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-pink) 100%);
+  border-radius: 2px;
+  min-width: 3px;
+}
+
+/* ── Capture Button ─────────────────────────────────────────────────── */
+.capture-btn {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #1a1500;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 800;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 16px rgba(245,158,11,0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.capture-btn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(245,158,11,0.45);
+}
+
+.capture-btn:active {
+  transform: translateY(0);
+}
+
+/* ── Playhead ───────────────────────────────────────────────────────── */
+.notation-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--neon-blue);
+  box-shadow: 0 0 8px var(--neon-blue), 0 0 16px rgba(0,212,255,0.3);
+  z-index: 10;
+  pointer-events: none;
+  animation: playhead-pulse 2s ease-in-out infinite;
+}
+
+/* ── Key Glow (Virtual Piano) ───────────────────────────────────────── */
+.piano-key-glow {
+  background: linear-gradient(180deg, #8b5cf6 0%, #ec4899 100%) !important;
+  animation: glow-key-press 0.4s ease-in-out;
+  box-shadow: 0 0 16px rgba(139,92,246,0.5), 0 0 32px rgba(236,72,153,0.3) !important;
+}
+
+/* ── Count-In Overlay ───────────────────────────────────────────────── */
+.count-in-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.count-in-number {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 120px;
+  font-weight: 900;
+  color: var(--accent-gold);
+  text-shadow: 0 0 40px rgba(245,158,11,0.6);
+  animation: countIn-flash 0.5s ease-out;
+}
+
+/* ── Generate Spinner ───────────────────────────────────────────────── */
+.gen-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
 }
