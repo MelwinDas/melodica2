@@ -12,6 +12,8 @@ interface Project {
   bpm: number | null;
   created_at: string;
   updated_at: string;
+  folder_id?: string;
+  midi_url?: string | null;
 }
 
 interface Profile {
@@ -19,9 +21,11 @@ interface Profile {
 }
 
 const GENRE_COLORS: Record<string, string> = {
-  Ambient: '#14b8a6', Blues: '#3b82f6', Jazz: '#f59e0b',
-  Classical: '#ec4899', Electronic: '#8b5cf6', Rock: '#ef4444',
-  Pop: '#f97316', Folk: '#84cc16', Latin: '#06b6d4',
+  Ambient: '#14b8a6', Blues: '#3b82f6', Classical: '#ec4899', Country: '#84cc16',
+  Electronic: '#8b5cf6', Folk: '#a855f7', Jazz: '#f59e0b', Latin: '#06b6d4',
+  Pop: '#f97316', Rock: '#ef4444', Soul: '#d946ef', Children: '#0d9488',
+  Rap: '#4ade80', Reggae: '#fbbf24', Religious: '#6366f1', Soundtracks: '#f43f5e',
+  Unknown: '#94a3b8', World: '#2dd4bf'
 };
 const colorFor = (genre: string | null) => GENRE_COLORS[genre ?? ''] ?? '#8b5cf6';
 const timeAgo = (iso: string) => {
@@ -61,6 +65,9 @@ export default function DashboardPage() {
   const [uploadDragOver, setUploadDragOver] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [moveId, setMoveId] = useState<string | null>(null);
+  const [targetFolder, setTargetFolder] = useState('');
+  const [moving, setMoving] = useState(false);
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -70,16 +77,45 @@ export default function DashboardPage() {
     if (currentFolderId && currentFolderId !== 'sample') {
       projQuery = projQuery.eq('folder_id', currentFolderId);
     } else if (currentFolderId === 'sample') {
-      // For now, sample folder shows no projects or we can have a special identifier
-      // Let's assume folder_id = null for all for now, but if sample is selected we filter specifically
-      projQuery = projQuery.eq('folder_id', '00000000-0000-0000-0000-000000000000'); // Dummy
+      // Find the real sample folder ID
+      const { data: sf } = await supabase.from('folders').select('id').eq('name', 'Sample').limit(1).single();
+      if (sf) projQuery = projQuery.eq('folder_id', sf.id);
+      else projQuery = projQuery.eq('folder_id', '00000000-0000-0000-0000-000000000000');
     }
 
-    const [{ data: proj }, { data: prof }, { data: f }] = await Promise.all([
+    let [{ data: proj }, { data: prof }, { data: f }] = await Promise.all([
       projQuery.order('updated_at', { ascending: false }),
       supabase.from('profiles').select('display_name').eq('id', user.id).single(),
       supabase.from('folders').select('*').order('created_at', { ascending: false })
     ]);
+
+    // Ensure Sample folder exists and contains Happy Birthday
+    let sampleFolder = f?.find(folder => folder.name === 'Sample');
+    if (f && !sampleFolder) {
+      const { data: newSample } = await supabase.from('folders').insert({ name: 'Sample', user_id: user.id }).select().single();
+      if (newSample) {
+        sampleFolder = newSample;
+        f = [newSample, ...(f || [])];
+      }
+    }
+
+    if (sampleFolder) {
+      const { data: hbExists } = await supabase.from('projects').select('id').eq('folder_id', sampleFolder.id).eq('name', 'Happy Birthday').maybeSingle();
+      if (!hbExists) {
+        await supabase.from('projects').insert({
+          user_id: user.id,
+          name: 'Happy Birthday',
+          genre: 'Children',
+          folder_id: sampleFolder.id,
+          midi_url: '/Happy_Sample.mid'
+        });
+        if (currentFolderId === 'sample') {
+          const { data: refreshed } = await supabase.from('projects').select('*').eq('folder_id', sampleFolder.id).order('updated_at', { ascending: false });
+          proj = refreshed;
+        }
+      }
+    }
+
     setProjects(proj ?? []);
     setProfile(prof ?? null);
     setFolders(f ?? []);
@@ -92,9 +128,11 @@ export default function DashboardPage() {
     if (currentFolderId && currentFolderId !== 'sample') {
       setNewProjectFolder(currentFolderId);
     } else {
-      setNewProjectFolder('');
+      // Find Sample folder ID
+      const sampleId = folders.find(f => f.name === 'Sample')?.id;
+      setNewProjectFolder(sampleId || '');
     }
-  }, [currentFolderId]);
+  }, [currentFolderId, folders]);
 
   const currentFolderName = currentFolderId === 'sample' ? 'Sample Folder' : 
                           folders.find(f => f.id === currentFolderId)?.name || 'All Projects';
@@ -118,6 +156,17 @@ export default function DashboardPage() {
       }
     }
     setCreatingFolder(false);
+  };
+
+  const handleMove = async () => {
+    if (!moveId || !targetFolder) return;
+    setMoving(true);
+    const { error } = await supabase.from('projects').update({ folder_id: targetFolder }).eq('id', moveId);
+    if (!error) {
+      setMoveId(null);
+      load();
+    }
+    setMoving(false);
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -251,11 +300,27 @@ export default function DashboardPage() {
             const color = colorFor(p.genre);
             return (
               <div key={p.id} className="glass-card card-hover" style={{ padding: '24px', cursor: 'pointer', position: 'relative' }}>
-                {/* Piano bar preview */}
-                <div style={{ background: '#0d0c1a', borderRadius: 10, padding: '12px', marginBottom: 16, display: 'flex', alignItems: 'flex-end', gap: 2, height: 56, overflow: 'hidden' }}>
-                  {Array.from({ length: 32 }).map((_, i) => (
-                    <div key={i} style={{ flex: 1, borderRadius: 2, background: color, height: `${20 + Math.abs(Math.sin(i * 0.7 + p.name.length)) * 30}px`, opacity: 0.5 + Math.abs(Math.sin(i)) * 0.5 }} />
-                  ))}
+                <div style={{ background: '#05040e', borderRadius: 12, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'flex-end', gap: 2, height: 60, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.02)', boxShadow: 'inset 0 0 30px rgba(0,0,0,0.8)' }}>
+                  {Array.from({ length: 45 }).map((_, i) => {
+                    // Unique seed for every project using its ID
+                    const seed = p.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+                    const wave1 = Math.sin(i * 0.35 + seed);
+                    const wave2 = Math.sin(i * 0.7 + seed * 1.5);
+                    const wave3 = Math.sin(i * 0.15 + seed * 0.5);
+                    const combined = (wave1 * 0.5 + wave2 * 0.3 + wave3 * 0.2 + 1) / 2; 
+                    const h = 10 + combined * 75;
+                    
+                    return (
+                      <div key={i} style={{ 
+                        flex: 1, borderRadius: '4px 4px 0 0', 
+                        background: `linear-gradient(to top, ${color}22, ${color})`, 
+                        height: `${h}%`, 
+                        opacity: 0.3 + (combined * 0.7),
+                        boxShadow: combined > 0.8 ? `0 0 10px ${color}40` : 'none',
+                        transition: 'height 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                      }} />
+                    );
+                  })}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -268,11 +333,15 @@ export default function DashboardPage() {
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, marginLeft: 8 }}>{timeAgo(p.updated_at)}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <Link href="/studio" style={{ flex: 1, textDecoration: 'none' }}>
+                  <Link href={p.midi_url ? `/studio?midi=${encodeURIComponent(p.midi_url)}` : '/studio'} style={{ flex: 1, textDecoration: 'none' }}>
                     <button style={{ width: '100%', background: `${color}22`, border: `1px solid ${color}44`, borderRadius: 8, padding: '7px 12px', cursor: 'pointer', color, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                       <span className="material-symbols-rounded" style={{ fontSize: 15 }}>play_arrow</span>Open
                     </button>
                   </Link>
+                  <button onClick={() => { setMoveId(p.id); setTargetFolder(p.folder_id || ''); }}
+                    style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                    <span className="material-symbols-rounded" style={{ fontSize: 15 }}>drive_file_move</span>
+                  </button>
                   <button onClick={() => setDeleteId(p.id)}
                     style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', color: 'var(--text-muted)' }}>
                     <span className="material-symbols-rounded" style={{ fontSize: 15 }}>delete</span>
@@ -299,6 +368,10 @@ export default function DashboardPage() {
                 <Link href="/studio" style={{ textDecoration: 'none' }}>
                   <span className="material-symbols-rounded" style={{ fontSize: 20, color: 'var(--text-muted)' }}>chevron_right</span>
                 </Link>
+                <button onClick={() => { setMoveId(p.id); setTargetFolder(p.folder_id || ''); }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
+                  <span className="material-symbols-rounded" style={{ fontSize: 18 }}>drive_file_move</span>
+                </button>
                 <button onClick={() => setDeleteId(p.id)}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
                   <span className="material-symbols-rounded" style={{ fontSize: 18 }}>delete</span>
@@ -324,7 +397,6 @@ export default function DashboardPage() {
                 <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 8 }}>Folder (optional)</label>
                 <select className="input-field" value={newProjectFolder} onChange={e => setNewProjectFolder(e.target.value)}
                   style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, width: '100%', padding: '10px 14px', outline: 'none', color: 'var(--text-primary)', fontSize: 13 }}>
-                  <option value="">No Folder (Root)</option>
                   {folders.map(f => (
                     <option key={f.id} value={f.id}>{f.name}</option>
                   ))}
@@ -335,7 +407,7 @@ export default function DashboardPage() {
                 <select className="input-field" value={newGenre} onChange={e => setNewGenre(e.target.value)}
                   style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, width: '100%', padding: '10px 14px', outline: 'none', color: 'var(--text-primary)', fontSize: 13 }}>
                   <option value="">Select genre…</option>
-                  {['Ambient','Blues','Classical','Country','Electronic','Folk','Jazz','Latin','Pop','Rock','Soul'].map(g => (
+                  {['Ambient','Blues','Children','Classical','Country','Electronic','Folk','Jazz','Latin','Pop','Rap','Reggae','Religious','Rock','Soul','Soundtracks','Unknown','World'].map(g => (
                     <option key={g} value={g}>{g}</option>
                   ))}
                 </select>
@@ -417,6 +489,37 @@ export default function DashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Move Project Modal */}
+      {moveId && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: 380, padding: '36px 32px' }}>
+            <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 20, fontWeight: 800, marginBottom: 24 }}>Move Project</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 8 }}>Select Target Folder</label>
+                <select className="input-field" value={targetFolder} onChange={e => setTargetFolder(e.target.value)}
+                  style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, width: '100%', padding: '10px 14px', outline: 'none', color: 'var(--text-primary)', fontSize: 13 }}>
+                  {folders.map(f => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
+
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+                <button onClick={() => setMoveId(null)}
+                  style={{ flex: 1, padding: '11px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 14 }}>
+                  Cancel
+                </button>
+                <button onClick={handleMove} disabled={moving}
+                  className="btn-primary" style={{ flex: 1, border: 'none', borderRadius: 10 }}>
+                  {moving ? 'Moving…' : 'Move Project'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

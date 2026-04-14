@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { EditTool, SnapGrid } from './lib/types';
 
 const MIN_LEFT_PCT = 25;
@@ -120,6 +121,34 @@ export default function StudioPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── MIDI load from file ────────────────────────────────────────────────
+  const handleLoadMidi = useCallback((buffer: ArrayBuffer, filename: string) => {
+    const state = parseMidiToTimeline(buffer);
+    clearHistory();
+    timeline.loadTimeline(state);
+    setSelectedIds(new Set());
+    setPlayheadSeconds(0);
+  }, [timeline, clearHistory]);
+
+  // ── Load MIDI from URL (e.g. /studio?midi=/path/to.mid) ────────────────
+  const searchParams = useSearchParams();
+  const midiParam = searchParams.get('midi');
+
+  useEffect(() => {
+    if (midiParam) {
+      (async () => {
+        try {
+          const res = await fetch(midiParam);
+          if (!res.ok) throw new Error('Failed to fetch MIDI');
+          const buf = await res.arrayBuffer();
+          handleLoadMidi(buf, midiParam.split('/').pop() || 'sample.mid');
+        } catch (e) {
+          console.error('Error loading MIDI from URL:', e);
+        }
+      })();
+    }
+  }, [midiParam, handleLoadMidi]);
+
   // ── Keyboard shortcuts ─────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -177,14 +206,7 @@ export default function StudioPage() {
     setIsRecording(r => !r);
   }, []);
 
-  // ── MIDI load from file ────────────────────────────────────────────────
-  const handleLoadMidi = useCallback((buffer: ArrayBuffer, filename: string) => {
-    const state = parseMidiToTimeline(buffer);
-    clearHistory();
-    timeline.loadTimeline(state);
-    setSelectedIds(new Set());
-    setPlayheadSeconds(0);
-  }, [timeline, clearHistory]);
+
 
   // ── AI generation concatenation ────────────────────────────────────────
   const handleAppendGenerated = useCallback((buffer: ArrayBuffer) => {

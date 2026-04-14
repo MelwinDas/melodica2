@@ -19,13 +19,23 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [creatingFolder, setCreatingFolder] = useState(false);
+  const [userProfile, setUserProfile] = useState<{ name: string; email: string } | null>(null);
 
   const loadFolders = useCallback(async () => {
     const { data } = await supabase.from('folders').select('*').order('created_at', { ascending: false });
     setFolders(data ?? []);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      setUserProfile({
+        name: user.user_metadata.full_name || user.email?.split('@')[0] || 'User',
+        email: user.email || ''
+      });
+    }
   }, [supabase]);
 
   useEffect(() => { loadFolders(); }, [loadFolders]);
+
 
   const handleCreateFolder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,11 +54,20 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   };
 
   const deleteFolder = async (id: string, name: string) => {
-    if (!window.confirm(`Delete folder "${name}"? Projects inside will be moved to root.`)) return;
+    const sampleFolder = folders.find(f => f.name === 'Sample');
+    if (!sampleFolder) return;
+    if (id === sampleFolder.id) return;
+
+    if (!window.confirm(`Delete folder "${name}"? All projects inside will also be deleted PERMANENTLY.`)) return;
+    
+    // Delete projects first
+    await supabase.from('projects').delete().eq('folder_id', id);
+    
+    // Delete the folder
     const { error } = await supabase.from('folders').delete().eq('id', id);
     if (!error) {
       loadFolders();
-      if (currentFolderId === id) window.location.href = '/dashboard';
+      window.location.reload(); 
     }
   };
 
@@ -95,15 +114,21 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             </div>
             
             {/* Fixed Sample Folder */}
-            <Link href="/dashboard?folder=sample" className={`sidebar-link ${pathname === '/dashboard' && currentFolderId === 'sample' ? 'active' : ''}`} style={{ width: '100%', textDecoration: 'none' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span className="material-symbols-rounded" style={{ fontSize: 18, color: 'var(--accent-teal)' }}>folder_special</span>
-                <span style={{ fontWeight: 600 }}>Sample</span>
-              </div>
-            </Link>
+            {folders.find(f => f.name === 'Sample') && (
+              <Link 
+                href={`/dashboard?folder=${folders.find(f => f.name === 'Sample')?.id}`} 
+                className={`sidebar-link ${currentFolderId === folders.find(f => f.name === 'Sample')?.id ? 'active' : ''}`} 
+                style={{ width: '100%', textDecoration: 'none' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className="material-symbols-rounded" style={{ fontSize: 18, color: 'var(--accent-teal)' }}>folder_special</span>
+                  <span style={{ fontWeight: 600 }}>Sample</span>
+                </div>
+              </Link>
+            )}
 
             {/* User Folders */}
-            {folders.map(f => (
+            {folders.filter(f => f.name !== 'Sample').map(f => (
               <div key={f.id} style={{ position: 'relative' }} className="folder-item-container">
                 <Link href={`/dashboard?folder=${f.id}`} className={`sidebar-link ${pathname === '/dashboard' && currentFolderId === f.id ? 'active' : ''}`} style={{ width: '100%', textDecoration: 'none', paddingRight: 32 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -131,13 +156,18 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         {/* Storage & User info */}
         <div style={{ marginTop: 'auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px' }}>
-            <div style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-teal) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: 'white' }}>U</div>
-            <div>
-              <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>User</p>
+            <div style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-teal) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: 'white' }}>
+              {userProfile?.name?.charAt(0).toUpperCase() || 'U'}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {userProfile?.name || 'User'}
+              </p>
               <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>Free Plan</p>
             </div>
           </div>
         </div>
+
       </aside>
 
       {/* Folder Creation Modal */}
