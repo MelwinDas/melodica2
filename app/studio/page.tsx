@@ -15,6 +15,7 @@ import TransportBar from './components/TransportBar';
 import Toolbar from './components/Toolbar';
 import PianoRollEditor from './components/PianoRollEditor';
 import RightPanel from './components/RightPanel';
+import { createClient } from '../../lib/supabase';
 
 function StudioPageContent() {
   // ── Core hooks ─────────────────────────────────────────────────────────
@@ -29,6 +30,11 @@ function StudioPageContent() {
   const [isRecording, setIsRecording] = useState(false);
   const [backendAlive, setBackendAlive] = useState<boolean | null>(null);
   const [playheadSeconds, setPlayheadSeconds] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const supabase = createClient();
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get('id');
 
   // ── Split Panel Resizing ─────────────────────────────────────────────
   const [leftWidthPct, setLeftWidthPct] = useState(55);
@@ -130,8 +136,54 @@ function StudioPageContent() {
     setPlayheadSeconds(0);
   }, [timeline.loadTimeline, clearHistory]);
 
+  const handleSave = useCallback(async () => {
+    if (!projectId) {
+      alert("No project ID found. Use the Dashboard to create or open a project first.");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const blob = timelineToMidiBlob({
+        notes: timeline.notes,
+        bpm: timeline.bpm,
+        timeSignature: timeline.timeSignature || [4, 4]
+      });
+
+      const fileName = `project_${projectId}_${Date.now()}.mid`;
+      
+      // Upload to Supabase Storage (Assumes 'projects' bucket exists)
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('projects')
+        .upload(fileName, blob, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Get Public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('projects')
+        .getPublicUrl(fileName);
+
+      // Update Database
+      const { error: dbError } = await supabase
+        .from('projects')
+        .update({ 
+          midi_url: publicUrl,
+          bpm: Math.round(timeline.bpm),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', projectId);
+
+      if (dbError) throw dbError;
+      alert("Project saved successfully!");
+    } catch (e: any) {
+      console.error('Save error:', e);
+      alert(`Error saving project: ${e.message || 'Check if "projects" bucket exists in Supabase Storage'}`);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [projectId, timeline.notes, timeline.bpm, timeline.timeSignature, supabase]);
+
   // ── Load MIDI from URL (e.g. /studio?midi=/path/to.mid) ────────────────
-  const searchParams = useSearchParams();
   const midiParam = searchParams.get('midi');
 
   useEffect(() => {
@@ -251,6 +303,8 @@ function StudioPageContent() {
           timeline.setBpm(b);
           audio.setPlaybackBpm(b);
         }}
+        onSave={projectId ? handleSave : undefined}
+        isSaving={isSaving}
       />
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>

@@ -202,7 +202,7 @@ function DashboardContent() {
     setCreating(false);
     setShowNewModal(false);
     setNewName(''); setNewGenre(''); setUploadFile(null);
-    if (data) router.push(`/studio`);
+    if (data) router.push(`/studio?id=${data.id}`);
   };
 
   const handleDelete = async (id: string) => {
@@ -334,7 +334,7 @@ function DashboardContent() {
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, marginLeft: 8 }}>{timeAgo(p.updated_at)}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <Link href={p.midi_url ? `/studio?midi=${encodeURIComponent(p.midi_url)}` : '/studio'} style={{ flex: 1, textDecoration: 'none' }}>
+                  <Link href={p.midi_url ? `/studio?id=${p.id}&midi=${encodeURIComponent(p.midi_url)}` : `/studio?id=${p.id}`} style={{ flex: 1, textDecoration: 'none' }}>
                     <button style={{ width: '100%', background: `${color}22`, border: `1px solid ${color}44`, borderRadius: 8, padding: '7px 12px', cursor: 'pointer', color, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                       <span className="material-symbols-rounded" style={{ fontSize: 15 }}>play_arrow</span>Open
                     </button>
@@ -366,7 +366,7 @@ function DashboardContent() {
                   <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{p.genre ?? 'No genre'} · {p.bpm ? `${p.bpm} BPM` : 'BPM not set'}</p>
                 </div>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0 }}>{timeAgo(p.updated_at)}</span>
-                <Link href="/studio" style={{ textDecoration: 'none' }}>
+                <Link href={`/studio?id=${p.id}${p.midi_url ? `&midi=${encodeURIComponent(p.midi_url)}` : ''}`} style={{ textDecoration: 'none' }}>
                   <span className="material-symbols-rounded" style={{ fontSize: 20, color: 'var(--text-muted)' }}>chevron_right</span>
                 </Link>
                 <button onClick={() => { setMoveId(p.id); setTargetFolder(p.folder_id || ''); }}

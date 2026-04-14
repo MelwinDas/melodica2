@@ -14,12 +14,15 @@ interface Props {
   onStop: () => void;
   onRecord: () => void;
   onBpmChange: (v: number) => void;
+  onSave?: () => void;
+  isSaving?: boolean;
 }
 
 export default function TransportBar({
   isPlaying, isRecording, bpm, backendAlive,
   snapGrid, onSnapChange,
   onPlay, onStop, onRecord, onBpmChange,
+  onSave, isSaving,
 }: Props) {
   return (
     <div style={{
@@ -97,6 +100,34 @@ export default function TransportBar({
           </span>
         </div>
       </div>
+
+      {onSave && (
+        <button
+          onClick={onSave}
+          disabled={isSaving}
+          style={{
+            marginLeft: 20,
+            background: 'var(--accent-teal)',
+            color: 'white',
+            border: 'none',
+            borderRadius: 8,
+            padding: '6px 14px',
+            fontSize: 12,
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            cursor: 'pointer',
+            opacity: isSaving ? 0.6 : 1,
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          }}
+        >
+          <span className="material-symbols-rounded" style={{ fontSize: 18, animation: isSaving ? 'spin 2s linear infinite' : 'none' }}>
+            {isSaving ? 'sync' : 'save'}
+          </span>
+          {isSaving ? 'SAVING...' : 'SAVE'}
+        </button>
+      )}
 
       <Link href="/dashboard" style={{
         marginLeft: 12, color: 'var(--text-muted)', textDecoration: 'none',
