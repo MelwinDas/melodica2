@@ -148,9 +148,9 @@ export default function RightPanel({
         fd.append('temperature', String(temperature));
         fd.append('top_k', String(topK));
         fd.append('genre', String(genre));
-        res = await fetch('http://localhost:8000/generate-with-seed', { method: 'POST', body: fd });
+        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/generate-with-seed`, { method: 'POST', body: fd });
       } else {
-        res = await fetch('http://localhost:8000/generate', {
+        res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/generate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ length: genLength, temperature, top_k: topK, genre }),

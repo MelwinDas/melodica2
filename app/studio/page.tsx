@@ -64,7 +64,7 @@ export default function StudioPage() {
 
   // ── Backend health ─────────────────────────────────────────────────────
   useEffect(() => {
-    fetch('http://localhost:8000/health', { signal: AbortSignal.timeout(3000) })
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/health`, { signal: AbortSignal.timeout(3000) })
       .then(r => setBackendAlive(r.ok))
       .catch(() => setBackendAlive(false));
   }, []);
