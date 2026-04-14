@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 
 export type QuantizeGrid = 'off' | '1/8' | '1/16' | '1/32';
 export type CountInMode = 'off' | '1bar' | '2bar';
@@ -484,7 +484,7 @@ export function usePianoEngine() {
 
   const allNoteCount = tracks.reduce((s, t) => s + t.length, 0) + liveNotes.length;
 
-  return {
+  return useMemo(() => ({
     isPlaying, isRecording, recordingPaused, bpm, timeSignature, position, playheadSeconds,
     metronomeEnabled, metronomeFlash, quantize, countIn,
     countInActive, countInBeat, lastVelocity, samplerReady,
@@ -496,5 +496,17 @@ export function usePianoEngine() {
     setQuantize, setCountIn, toggleMetronome,
     trimSilence, clearAllTracks,
     exportMidiBlob,
-  };
+  }), [
+    isPlaying, isRecording, recordingPaused, bpm, timeSignature, position, playheadSeconds,
+    metronomeEnabled, metronomeFlash, quantize, countIn,
+    countInActive, countInBeat, lastVelocity, samplerReady,
+    tracks, liveNotes, allNoteCount,
+    play, pause, stop,
+    startRecording, pauseRecording, resumeRecording, stopRecording,
+    playAllTracks, seek,
+    noteOn, noteOff, setBpm, setTimeSignature,
+    setQuantize, setCountIn, toggleMetronome,
+    trimSilence, clearAllTracks,
+    exportMidiBlob,
+  ]);
 }

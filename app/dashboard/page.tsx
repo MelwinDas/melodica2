@@ -36,11 +36,12 @@ const timeAgo = (iso: string) => {
   return `${Math.round(diff / 86400)}d ago`;
 };
 
+const supabase = createClient();
+
 export default function DashboardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentFolderId = searchParams.get('folder');
-  const supabase = createClient();
 
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [projects, setProjects] = useState<Project[]>([]);

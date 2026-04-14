@@ -128,7 +128,7 @@ export default function StudioPage() {
     timeline.loadTimeline(state);
     setSelectedIds(new Set());
     setPlayheadSeconds(0);
-  }, [timeline, clearHistory]);
+  }, [timeline.loadTimeline, clearHistory]);
 
   // ── Load MIDI from URL (e.g. /studio?midi=/path/to.mid) ────────────────
   const searchParams = useSearchParams();

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import { TimelineNote, TimelineState, Command, generateNoteId } from '../lib/types';
 
 export function useTimelineState(undoPush: (cmd: Command) => void) {
@@ -154,11 +154,16 @@ export function useTimelineState(undoPush: (cmd: Command) => void) {
     generationBoundary,
   }), [timeSignature, generationBoundary]);
 
-  return {
+  return useMemo(() => ({
     notes, bpm, timeSignature, notesRef, bpmRef,
     loadTimeline, appendNotes, setBpm,
     addNote, deleteNote, deleteNotes,
     moveNote, resizeNote, setNoteVelocity,
     bulkMove, getEndTime, getState, generationBoundary
-  };
+  }), [
+    notes, bpm, timeSignature, loadTimeline, appendNotes, setBpm,
+    addNote, deleteNote, deleteNotes,
+    moveNote, resizeNote, setNoteVelocity,
+    bulkMove, getEndTime, getState, generationBoundary
+  ]);
 }
