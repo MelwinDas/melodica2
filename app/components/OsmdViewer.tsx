@@ -60,8 +60,7 @@ export default function OsmdViewer({ musicXml, zoom = 1.0, drawTitle = false }: 
         background: 'white',
         borderRadius: 10,
         padding: '16px 12px',
-        overflow: 'auto',
-        minHeight: 120,
+        minHeight: '100%',
         width: '100%',
       }}
     />

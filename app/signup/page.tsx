@@ -133,11 +133,8 @@ export default function SignUpPage() {
         </p>
       </div>
 
-      <div className="flex items-center gap-6 mt-8">
-        {['About', 'Privacy', 'Terms'].map(item => (
-          <button key={item} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', transition: 'color 0.2s' }}>{item}</button>
-        ))}
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>© 2024 Melodica Music Inc.</span>
+      <div style={{ marginTop: 28, fontSize: 12, color: 'var(--text-muted)' }}>
+        © 2026 Melodica Music Inc.
       </div>
     </div>
   );

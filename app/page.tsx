@@ -1,9 +1,16 @@
 'use client';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createClient } from '../lib/supabase';
 
 export default function LandingPage() {
+  const supabase = createClient();
   const [popover, setPopover] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => setUser(user));
+  }, [supabase]);
 
   const features = [
     {
@@ -36,17 +43,24 @@ export default function LandingPage() {
             <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 22, color: 'var(--text-primary)' }}>Melodica</span>
           </div>
           <div className="hidden md:flex items-center gap-8">
-            {['Home', 'Studio', 'Piano', 'Contact Us'].map((item) => (
-              <Link
-                key={item}
-                href={item === 'Home' ? '/' : item === 'Studio' ? '/studio' : item === 'Piano' ? '/piano' : '#'}
-                style={{ color: 'var(--text-secondary)', fontSize: 14, fontWeight: 500, textDecoration: 'none', transition: 'color 0.2s' }}
-                onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
-                onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
-              >
-                {item}
-              </Link>
-            ))}
+            {['Home', 'Studio', 'Piano', 'Contact Us'].map((item) => {
+              let href = '#';
+              if (item === 'Home') href = '/';
+              else if (item === 'Studio') href = user ? '/studio' : '/login';
+              else if (item === 'Piano') href = user ? '/piano' : '/login';
+              
+              return (
+                <Link
+                  key={item}
+                  href={href}
+                  style={{ color: 'var(--text-secondary)', fontSize: 14, fontWeight: 500, textDecoration: 'none', transition: 'color 0.2s' }}
+                  onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => (e.currentTarget.style.color = 'var(--text-primary)')}
+                  onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+                >
+                  {item}
+                </Link>
+              );
+            })}
           </div>
           <div className="flex items-center gap-3">
             <Link href="/login" className="btn-secondary" style={{ padding: '9px 20px', fontSize: 13 }}>Log in</Link>
@@ -68,15 +82,15 @@ export default function LandingPage() {
           </p>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, flexWrap: 'wrap' }}>
             <Link href="/signup" className="btn-primary" style={{ fontSize: 16, padding: '14px 36px' }}>Start Creating Free</Link>
-            <Link href="/studio" className="btn-secondary" style={{ fontSize: 16, padding: '14px 36px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Link href={user ? "/studio" : "/login"} className="btn-secondary" style={{ fontSize: 16, padding: '14px 36px', display: 'flex', alignItems: 'center', gap: 8 }}>
               <span className="material-symbols-rounded" style={{ fontSize: 20 }}>play_circle</span>
               Open Studio
             </Link>
           </div>
 
         {/* Hero visual */}
-        <div className="relative mt-20 mx-auto" style={{ maxWidth: 900 }}>
-          <div className="glass-card p-6 overflow-hidden" style={{ borderRadius: 24, border: '1px solid var(--border-light)' }}>
+        <div className="relative" style={{ maxWidth: 900, margin: '80px auto 0' }}>
+          <div className="glass-card p-6 overflow-hidden" style={{ borderRadius: 24, border: '1px solid var(--border-light)', textAlign: 'left' }}>
             {/* Mini DAW preview */}
             <div className="flex gap-3 mb-4">
               {['#ff5f57','#febc2e','#28c840'].map(c => (
@@ -103,9 +117,9 @@ export default function LandingPage() {
                     }}>
                       {Array.from({ length: 18 }).map((_, j) => (
                         <div key={j} style={{
-                          width: 2, borderRadius: 1, flexShrink: 0,
+                          width: '2px', borderRadius: '1px', flexShrink: 0,
                           background: track.color,
-                          height: `${20 + Math.sin(j * 0.8 + i) * 14}px`,
+                          height: `${Math.round(20 + Math.sin(j * 0.8 + i) * 14)}px`,
                           opacity: 0.8
                         }} />
                       ))}
@@ -115,30 +129,37 @@ export default function LandingPage() {
               ))}
             </div>
             {/* Playback controls */}
-            <div className="flex items-center justify-center gap-4 mt-4">
-              <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-                <span className="material-symbols-rounded" style={{ fontSize: 24 }}>skip_previous</span>
-              </button>
-              <button style={{
-                background: 'linear-gradient(135deg, var(--accent-purple) 0%, #6d28d9 100%)',
-                border: 'none', borderRadius: '50%', width: 48, height: 48,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', boxShadow: '0 4px 20px rgba(139,92,246,0.4)'
-              }}>
-                <span className="material-symbols-rounded" style={{ fontSize: 24, color: 'white' }}>play_arrow</span>
-              </button>
-              <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-                <span className="material-symbols-rounded" style={{ fontSize: 24 }}>skip_next</span>
-              </button>
-              <div style={{ marginLeft: 16, display: 'flex', alignItems: 'center', gap: 3, height: 24 }}>
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="wave-bar" style={{
-                    height: `${10 + Math.sin(i * 0.9) * 8}px`,
-                    animationDelay: `${i * 0.15}s`
-                  }} />
-                ))}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', marginTop: 16 }}>
+              <div /> {/* Left spacer */}
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                  <span className="material-symbols-rounded" style={{ fontSize: 24 }}>skip_previous</span>
+                </button>
+                <button style={{
+                  background: 'linear-gradient(135deg, var(--accent-purple) 0%, #6d28d9 100%)',
+                  border: 'none', borderRadius: '50%', width: 48, height: 48,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer', boxShadow: '0 4px 20px rgba(139,92,246,0.4)'
+                }}>
+                  <span className="material-symbols-rounded" style={{ fontSize: 24, color: 'white' }}>play_arrow</span>
+                </button>
+                <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                  <span className="material-symbols-rounded" style={{ fontSize: 24 }}>skip_next</span>
+                </button>
               </div>
-              <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace' }}>1:24 / 3:47</span>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 3, height: 24 }}>
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="wave-bar" style={{
+                      height: `${10 + Math.sin(i * 0.9) * 8}px`,
+                      animationDelay: `${i * 0.15}s`
+                    }} />
+                  ))}
+                </div>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace' }}>1:24 / 3:47</span>
+              </div>
             </div>
           </div>
           {/* Glow orbs */}
@@ -212,7 +233,7 @@ export default function LandingPage() {
           <div className="flex items-center gap-2">
             <span className="material-symbols-rounded" style={{ color: 'var(--accent-purple)', fontSize: 22 }}>piano</span>
             <span style={{ fontWeight: 700, fontSize: 16 }}>Melodica</span>
-            <span style={{ marginLeft: 12, fontSize: 12, color: 'var(--text-muted)' }}>© 2024 Melodica AI. All rights reserved.</span>
+            <span style={{ marginLeft: 12, fontSize: 12, color: 'var(--text-muted)' }}>© 2026 Melodica AI. All rights reserved.</span>
           </div>
           <div className="flex items-center gap-6 relative">
             {['Privacy Policy', 'Terms of Service', 'Help Center'].map((item) => (
@@ -220,8 +241,8 @@ export default function LandingPage() {
                 <button
                   onClick={() => setPopover(popover === item ? null : item)}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 13, transition: 'color 0.2s' }}
-                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
-                  onMouseLeave={e => { if (popover !== item) e.currentTarget.style.color = 'var(--text-muted)'; }}
+                  onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+                  onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => { if (popover !== item) e.currentTarget.style.color = 'var(--text-muted)'; }}
                 >
                   {item}
                 </button>

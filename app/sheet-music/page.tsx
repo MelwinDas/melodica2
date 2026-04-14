@@ -159,9 +159,27 @@ export default function SheetMusicPage() {
       envelope: { attack: 0.02, decay: 0.1, sustain: 0.5, release: 0.8 },
     }).toDestination();
     synthRef.current = synth;
-    notes.slice(0, 64).forEach((n, i) => synth.triggerAttackRelease(n.pitch, '8n', Tone.now() + i * 0.35));
-    setIsPlaying(true);
-    setTimeout(() => { synth.dispose(); synthRef.current = null; setIsPlaying(false); }, notes.length * 350 + 800);
+
+    if (!isDirty && sourceBlobRef.current) {
+       // Play the actual multi-track MIDI file accurately
+       const buf = await sourceBlobRef.current.arrayBuffer();
+       const midi = new Midi(buf);
+       const now = Tone.now() + 0.1;
+       let maxTime = 0;
+       midi.tracks.forEach(track => {
+         track.notes.forEach(note => {
+           synth.triggerAttackRelease(note.name, note.duration, now + note.time, note.velocity);
+           if (note.time + note.duration > maxTime) maxTime = note.time + note.duration;
+         });
+       });
+       setIsPlaying(true);
+       setTimeout(() => { synth.dispose(); synthRef.current = null; setIsPlaying(false); }, (maxTime + 1) * 1000);
+    } else {
+       // Fallback to playing the rudimentary sequence
+       notes.slice(0, 64).forEach((n, i) => synth.triggerAttackRelease(n.pitch, '8n', Tone.now() + i * 0.35));
+       setIsPlaying(true);
+       setTimeout(() => { synth.dispose(); synthRef.current = null; setIsPlaying(false); }, notes.length * 350 + 800);
+    }
   };
 
   const handleStop = () => { synthRef.current?.dispose(); synthRef.current = null; setIsPlaying(false); };

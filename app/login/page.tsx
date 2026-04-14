@@ -83,7 +83,7 @@ export default function LoginPage() {
         </p>
       </div>
 
-      <p style={{ marginTop: 28, fontSize: 12, color: 'var(--text-muted)' }}>© 2024 Melodica Music Inc. Built for audiophiles.</p>
+      <p style={{ marginTop: 28, fontSize: 12, color: 'var(--text-muted)' }}>© 2026 Melodica Music Inc.</p>
     </div>
   );
 }
