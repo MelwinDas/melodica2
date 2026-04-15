@@ -19,12 +19,12 @@ interface TourStep {
   spotlightClicks?: boolean;
 }
 
-const TOUR_STEPS: TourStep[] = [
+const STUDIO_TOUR_STEPS: TourStep[] = [
   // Step 0 – Welcome (center overlay, no target)
   {
     target: 'body',
     title: '🎵 Welcome to Melodica',
-    content: 'Let\'s take a quick tour of the studio. We\'ll walk you through note editing, AI generation, recording tools, and the sheet music view.',
+    content: 'Let\'s take a quick tour of the studio. We\'ll walk you through note editing, AI generation, and exporting your tracks.',
     page: '/studio',
     placement: 'center',
     disableBeacon: true,
@@ -60,13 +60,34 @@ const TOUR_STEPS: TourStep[] = [
   {
     target: '[data-tour="open-piano-btn"]',
     title: '🎹 Live Recording',
-    content: 'Ready to lay down some live tracks? Click "Open Piano" to switch to the professional recording view, where you can record audio using your MIDI keyboard.',
+    content: 'Ready to lay down some live tracks? Click "Open Piano" anytime to switch to the professional recording view. (You can take a separate tour there!)',
+    page: '/studio',
+    placement: 'bottom',
+    disableBeacon: true,
+  },
+  // Step 5 – View Sheet Music
+  {
+    target: '[data-tour="view-sheet-music-btn"]',
+    title: '🎶 View Sheet Music',
+    content: 'Take a look at your generated masterpiece! Click this button to open the full Sheet Music View and finalize your track.',
     page: '/studio',
     placement: 'bottom',
     disableBeacon: true,
     spotlightClicks: true,
   },
-  // Step 5 – Record Audio
+];
+
+const PIANO_TOUR_STEPS: TourStep[] = [
+  // Step 0 – Welcome
+  {
+    target: 'body',
+    title: '🎹 Piano Recording',
+    content: "Welcome to the recording view! Let's explore the tools you'll use to capture your live performance, from metronomes to quantization.",
+    page: '/piano',
+    placement: 'center',
+    disableBeacon: true,
+  },
+  // Step 1 – Record Audio
   {
     target: '[data-tour="piano-record-btn"]',
     title: '🎙️ Record Audio',
@@ -76,7 +97,7 @@ const TOUR_STEPS: TourStep[] = [
     disableBeacon: true,
     spotlightClicks: true,
   },
-  // Step 6 – Metronome
+  // Step 1 – Metronome
   {
     target: '[data-tour="piano-metronome-btn"]',
     title: '⏱️ Metronome',
@@ -85,7 +106,7 @@ const TOUR_STEPS: TourStep[] = [
     placement: 'bottom',
     disableBeacon: true,
   },
-  // Step 7 – Count-In
+  // Step 2 – Count-In
   {
     target: '[data-tour="piano-count-in"]',
     title: '⏳ Count-In',
@@ -94,7 +115,7 @@ const TOUR_STEPS: TourStep[] = [
     placement: 'right',
     disableBeacon: true,
   },
-  // Step 8 – Quantization
+  // Step 3 – Quantization
   {
     target: '[data-tour="piano-quantize"]',
     title: '🧲 Quantization',
@@ -103,7 +124,7 @@ const TOUR_STEPS: TourStep[] = [
     placement: 'right',
     disableBeacon: true,
   },
-  // Step 9 – Velocity Bar
+  // Step 4 – Velocity Bar
   {
     target: '[data-tour="piano-velocity"]',
     title: '🏃 Velocity Bar',
@@ -112,7 +133,7 @@ const TOUR_STEPS: TourStep[] = [
     placement: 'right',
     disableBeacon: true,
   },
-  // Step 10 – Multi-Staff Chords
+  // Step 5 – Multi-Staff Chords
   {
     target: '[data-tour="sheet-music-stage"]',
     title: '🎼 Multi-Staff Chords',
@@ -120,16 +141,6 @@ const TOUR_STEPS: TourStep[] = [
     page: '/piano',
     placement: 'top',
     disableBeacon: true,
-  },
-  // Step 11 – View Sheet Music (back to Studio)
-  {
-    target: '[data-tour="view-sheet-music-btn"]',
-    title: '🎶 View Sheet Music',
-    content: 'Take a look at your generated masterpiece! Click this button to open the full Sheet Music View and finalize your track.',
-    page: '/studio',
-    placement: 'bottom',
-    disableBeacon: true,
-    spotlightClicks: true,
   },
 ];
 
@@ -279,14 +290,13 @@ function TourTooltip({
 /* --- Main Tour Component --- */
 
 export default function OnboardingTour() {
-  const router   = useRouter();
   const pathname = usePathname();
 
   const [run, setRun]             = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [mounted, setMounted]     = useState(false);
   const [dbComplete, setDbComplete] = useState<boolean | null>(null);
-  const navigatingRef             = useRef(false);
+  const [tourSteps, setTourSteps] = useState<TourStep[]>(STUDIO_TOUR_STEPS);
   const pollTimerRef              = useRef<NodeJS.Timeout | null>(null);
   const supabase                  = createClient();
 
@@ -295,67 +305,38 @@ export default function OnboardingTour() {
     setMounted(true); 
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user?.user_metadata?.has_completed_tour) {
-        setDbComplete(true);
-      } else {
-        setDbComplete(false);
-      }
+      setDbComplete(!!user?.user_metadata?.has_completed_tour);
     })();
   }, [supabase]);
 
-  // -- Auto-trigger on Studio page if tour not completed --
+  // -- Auto-trigger Studio Tour --
   useEffect(() => {
     if (!mounted || dbComplete === null) return;
     
-    // Check LocalStorage first for speed, then DB
-    const localCompleted = localStorage.getItem(STORAGE_KEY_COMPLETE);
-    if (localCompleted || dbComplete) return;
+    // DB is the source of truth. If DB says complete, we stop.
+    // If DB says incomplete, we ignore LocalStorage (which might have a flag from another user).
+    if (dbComplete === true) return;
 
-    // Check if we're resuming a tour in progress (cross-page nav)
-    const savedStep = localStorage.getItem(STORAGE_KEY_STEP);
-    const isRunning = localStorage.getItem(STORAGE_KEY_RUNNING);
-
-    if (isRunning === 'true' && savedStep) {
-      let stepIdx = parseInt(savedStep, 10);
-
-      // Handle spotlightClicks auto-advancing based on URL changes
-      if (stepIdx === 4 && pathname.startsWith('/piano')) {
-        // User clicked "Open Piano" from step 4
-        stepIdx = 5;
-        localStorage.setItem(STORAGE_KEY_STEP, '5');
-      } else if (stepIdx === TOUR_STEPS.length - 1 && pathname.startsWith('/sheet-music')) {
-        // User clicked "View Sheet Music" on the last step, successfully finishing the tour
-        setRun(false);
-        localStorage.setItem(STORAGE_KEY_COMPLETE, 'true');
-        localStorage.removeItem(STORAGE_KEY_STEP);
-        localStorage.removeItem(STORAGE_KEY_RUNNING);
-        
-        // Persist to account
-        supabase.auth.updateUser({ data: { has_completed_tour: true } });
-        
-        // Hard navigate so the studio cleanly mounts the Happy Birthday sample
-        setTimeout(() => {
-          window.location.assign('/studio?id=55d72c9d-f2d3-410c-8deb-57588f275679');
-        }, 250);
-        return;
-      }
-
-      const targetPage = TOUR_STEPS[stepIdx]?.page;
-      if (pathname === targetPage || pathname.startsWith(targetPage)) {
-        setStepIndex(stepIdx);
-        waitForTarget(TOUR_STEPS[stepIdx].target, () => {
+    // Only auto-trigger on Studio
+    if (pathname === '/studio' || pathname.startsWith('/studio')) {
+      const isRunning = localStorage.getItem(STORAGE_KEY_RUNNING);
+      if (isRunning !== 'true') {
+        localStorage.setItem(STORAGE_KEY_RUNNING, 'true');
+        localStorage.setItem(STORAGE_KEY_STEP, '0');
+        setTourSteps(STUDIO_TOUR_STEPS);
+        setStepIndex(0);
+        setRun(true);
+      } else {
+        // Resume Studio tour if it was interrupted on the same page
+        const savedStep = localStorage.getItem(STORAGE_KEY_STEP);
+        if (savedStep) {
+          setTourSteps(STUDIO_TOUR_STEPS);
+          setStepIndex(parseInt(savedStep, 10));
           setRun(true);
-          navigatingRef.current = false;
-        });
+        }
       }
-    } else if (pathname === '/studio' || pathname.startsWith('/studio')) {
-      // First-time auto trigger on Studio page
-      setStepIndex(0);
-      setRun(true);
-      localStorage.setItem(STORAGE_KEY_RUNNING, 'true');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, pathname, dbComplete, supabase]);
+  }, [mounted, pathname, dbComplete]);
 
   // -- Cleanup poll timer on unmount --
   useEffect(() => {
@@ -364,121 +345,68 @@ export default function OnboardingTour() {
     };
   }, []);
 
-  // -- Wait for a DOM element to appear --
-  const waitForTarget = useCallback((selector: string, onFound: () => void) => {
-    if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-
-    let attempts = 0;
-    const maxAttempts = 40; // ~4 seconds max
-
-    const poll = () => {
-      attempts++;
-      const el = document.querySelector(selector);
-      if (el) {
-        onFound();
-        return;
-      }
-      if (attempts < maxAttempts) {
-        pollTimerRef.current = setTimeout(poll, 100);
-      }
-    };
-    // Small initial delay for page transition
-    pollTimerRef.current = setTimeout(poll, 200);
-  }, []);
-
-  // -- Navigate to the step's page if needed --
-  const navigateToStep = useCallback((idx: number) => {
-    const step = TOUR_STEPS[idx];
-    if (!step) return;
-
-    const targetPage = step.page;
-    const onTargetPage = pathname === targetPage || pathname.startsWith(targetPage + '?');
-
-    // Persist step for cross-page resume
-    localStorage.setItem(STORAGE_KEY_STEP, String(idx));
-
-    if (!onTargetPage) {
-      // Need to navigate — pause tour, navigate, wait for element
-      navigatingRef.current = true;
-      setRun(false);
-      router.push(targetPage);
-      // The useEffect on pathname change will resume the tour
-    } else {
-      // Same page — wait for target element then show step
-      waitForTarget(step.target, () => {
-        setStepIndex(idx);
-        setRun(true);
-        navigatingRef.current = false;
-      });
-    }
-  }, [pathname, router, waitForTarget]);
-
   // -- Joyride callback handler --
   const handleJoyrideCallback = useCallback((data: any) => {
-    const { action, index, type, status, lifecycle } = data;
+    const { action, index, type, status } = data;
 
-    // Tour finished, skipped, or manually closed
-    // We also check for 'next' action on the last step as that's when "Finish" is clicked
-    const isLastStep = index === TOUR_STEPS.length - 1;
-    const isFinished = status === 'finished' || (isLastStep && type === 'step:after' && action === 'next');
+    const isLastStep = index === tourSteps.length - 1;
+    const isFinished = status === 'finished' || status === 'skipped' || action === 'close' || (isLastStep && type === 'step:after' && action === 'next');
 
-    if (isFinished || status === 'skipped' || action === 'close') {
+    if (isFinished) {
       setRun(false);
-      localStorage.setItem(STORAGE_KEY_COMPLETE, 'true');
+      
+      const wasStudioTour = tourSteps === STUDIO_TOUR_STEPS;
+      
+      // Mark as globally complete if Studio tour is finished or skipped
+      if (wasStudioTour) {
+        localStorage.setItem(STORAGE_KEY_COMPLETE, 'true');
+        supabase.auth.updateUser({ data: { has_completed_tour: true } });
+      }
+
       localStorage.removeItem(STORAGE_KEY_STEP);
       localStorage.removeItem(STORAGE_KEY_RUNNING);
-
-      // Persist to account (async, but we trigger it now)
-      supabase.auth.updateUser({ data: { has_completed_tour: true } });
-
-      // Definitively redirect to the demo project with a hard reload
-      // We use a longer timeout (250ms) to ensure the metadata update has been fired off effectively
-      setTimeout(() => {
-        window.location.assign('/studio?id=55d72c9d-f2d3-410c-8deb-57588f275679');
-      }, 250);
       return;
     }
 
     if (type === 'step:after') {
-      if (action === 'next') {
-        const nextIdx = index + 1;
-        if (nextIdx < TOUR_STEPS.length) {
-          navigateToStep(nextIdx);
-        }
-      } else if (action === 'prev') {
-        const prevIdx = index - 1;
-        if (prevIdx >= 0) {
-          navigateToStep(prevIdx);
-        }
+      const nextIdx = index + (action === 'prev' ? -1 : 1);
+      if (nextIdx >= 0 && nextIdx < tourSteps.length) {
+        setStepIndex(nextIdx);
+        localStorage.setItem(STORAGE_KEY_STEP, String(nextIdx));
       }
     }
+  }, [tourSteps, supabase]);
 
-  }, [navigateToStep]);
-
-  // -- Manual start (called from Help button) --
+  // -- Manual Tour Trigger Listeners --
   useEffect(() => {
-    const handler = () => {
+    const startStudio = () => {
       localStorage.removeItem(STORAGE_KEY_COMPLETE);
       localStorage.setItem(STORAGE_KEY_RUNNING, 'true');
-
-      // If not on studio, navigate there first
-      if (pathname !== '/studio' && !pathname.startsWith('/studio')) {
-        localStorage.setItem(STORAGE_KEY_STEP, '0');
-        router.push('/studio');
-      } else {
-        setStepIndex(0);
-        setRun(true);
-      }
+      localStorage.setItem(STORAGE_KEY_STEP, '0');
+      setTourSteps(STUDIO_TOUR_STEPS);
+      setStepIndex(0);
+      setRun(true);
     };
 
-    window.addEventListener('melodica:start-tour', handler);
-    return () => window.removeEventListener('melodica:start-tour', handler);
-  }, [pathname, router]);
+    const startPiano = () => {
+      localStorage.setItem(STORAGE_KEY_STEP, '0');
+      setTourSteps(PIANO_TOUR_STEPS);
+      setStepIndex(0);
+      setRun(true);
+    };
+
+    window.addEventListener('melodica:start-tour', startStudio);
+    window.addEventListener('melodica:start-piano-tour', startPiano);
+    return () => {
+      window.removeEventListener('melodica:start-tour', startStudio);
+      window.removeEventListener('melodica:start-piano-tour', startPiano);
+    };
+  }, []);
 
   if (!mounted) return null;
 
   // Convert steps to react-joyride format
-  const joyrideSteps = TOUR_STEPS.map((s) => ({
+  const joyrideSteps = tourSteps.map((s) => ({
     target: s.target,
     title: s.title,
     content: s.content,

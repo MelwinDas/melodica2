@@ -235,6 +235,17 @@ export default function PianoHeader({
           </span>
         </div>
 
+        {/* Help / Tour */}
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent('melodica:start-piano-tour'))}
+          className="transport-btn"
+          title="Start Recording Tour"
+          style={{ padding: '6px 10px', gap: 5, background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }}
+        >
+          <span className="material-symbols-rounded" style={{ fontSize: 18 }}>help</span>
+          Help
+        </button>
+
         {/* Open in Studio */}
         <button
           onClick={onOpenStudio}
