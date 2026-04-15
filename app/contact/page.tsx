@@ -48,15 +48,7 @@ export default function ContactPage() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(20,184,166,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span className="material-symbols-rounded" style={{ color: 'var(--accent-teal)', fontSize: 24 }}>public</span>
-              </div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 2 }}>Community</div>
-                <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Join our Discord</div>
-              </div>
-            </div>
+
           </div>
         </div>
 
