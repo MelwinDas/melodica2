@@ -334,7 +334,9 @@ export default function OnboardingTour() {
         supabase.auth.updateUser({ data: { has_completed_tour: true } });
         
         // Hard navigate so the studio cleanly mounts the Happy Birthday sample
-        window.location.assign('/studio?id=55d72c9d-f2d3-410c-8deb-57588f275679&midi=%2FHappy_Sample.mid');
+        setTimeout(() => {
+          window.location.assign('/studio?id=55d72c9d-f2d3-410c-8deb-57588f275679&midi=%2FHappy_Sample.mid');
+        }, 250);
         return;
       }
 
@@ -353,7 +355,7 @@ export default function OnboardingTour() {
       localStorage.setItem(STORAGE_KEY_RUNNING, 'true');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, pathname]);
+  }, [mounted, pathname, dbComplete, supabase]);
 
   // -- Cleanup poll timer on unmount --
   useEffect(() => {
@@ -426,13 +428,14 @@ export default function OnboardingTour() {
       localStorage.removeItem(STORAGE_KEY_STEP);
       localStorage.removeItem(STORAGE_KEY_RUNNING);
 
-      // Persist to account
+      // Persist to account (async, but we trigger it now)
       supabase.auth.updateUser({ data: { has_completed_tour: true } });
 
       // Definitively redirect to the demo project with a hard reload
+      // We use a longer timeout (250ms) to ensure the metadata update has been fired off effectively
       setTimeout(() => {
         window.location.assign('/studio?id=55d72c9d-f2d3-410c-8deb-57588f275679&midi=%2FHappy_Sample.mid');
-      }, 100);
+      }, 250);
       return;
     }
 

@@ -139,8 +139,14 @@ function DashboardContent() {
                           folders.find(f => f.id === currentFolderId)?.name || 'All Projects';
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
+    try {
+      await supabase.auth.signOut();
+      // Use window.location instead of router.push for a clean slate sign-out
+      window.location.href = '/login';
+    } catch (e) {
+      console.error('Sign out error:', e);
+      window.location.href = '/login';
+    }
   };
 
   const handleCreateFolder = async (e: React.FormEvent) => {

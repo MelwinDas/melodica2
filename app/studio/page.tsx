@@ -149,7 +149,8 @@ function StudioPageContent() {
         timeSignature: timeline.timeSignature || [4, 4]
       });
 
-      const fileName = `project_${projectId}_${Date.now()}.mid`;
+      // Use a consistent filename based on projectId so that upsert: true actually overwrites the same file
+      const fileName = `project_${projectId}.mid`;
       
       // Upload to Supabase Storage (Assumes 'projects' bucket exists)
       const { data: uploadData, error: uploadError } = await supabase.storage
