@@ -19,7 +19,7 @@ const TOOLS: { id: EditTool; icon: string; label: string; hint: string }[] = [
 
 export default function Toolbar({ tool, onToolChange, canUndo, canRedo, onUndo, onRedo, onViewSheetMusic }: Props) {
   return (
-    <div style={{
+    <div data-tour="piano-roll-tools" style={{
       display: 'flex', alignItems: 'center', gap: 8,
       padding: '4px 10px', borderBottom: '1px solid var(--border)',
       background: '#1a1828', flexShrink: 0,
@@ -86,6 +86,7 @@ export default function Toolbar({ tool, onToolChange, canUndo, canRedo, onUndo, 
 
       {/* View Sheet Music */}
       <button
+        data-tour="view-sheet-music-btn"
         onClick={onViewSheetMusic}
         style={{
           padding: '5px 12px', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer',

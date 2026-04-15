@@ -49,56 +49,10 @@ export default function PianoHeader({
       <div style={{ flex: 1 }} />
 
       {/* ── TRANSPORT CENTER ─────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+      <div data-tour="recording-controls" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
 
-        {/* ── RECORDING STATE CONTROLS ─────────────────────────────── */}
-        {isRecording ? (
-          <>
-            {/* Pause Record */}
-            <button
-              onClick={onPauseRecord}
-              className="transport-btn"
-              title="Pause Recording"
-              style={{ gap: 5 }}
-            >
-              <span className="material-symbols-rounded" style={{ fontSize: 18 }}>pause</span>
-              <span style={{ fontSize: 11, fontWeight: 700 }}>Pause Rec</span>
-            </button>
-            {/* Stop Record */}
-            <button
-              onClick={onStopRecord}
-              className="transport-btn record active"
-              title="Stop Recording"
-              style={{ gap: 5 }}
-            >
-              <span className="material-symbols-rounded" style={{ fontSize: 18 }}>stop</span>
-              <span style={{ fontSize: 11, fontWeight: 700 }}>Stop Rec</span>
-            </button>
-          </>
-        ) : recordingPaused ? (
-          <>
-            {/* Resume Record */}
-            <button
-              onClick={onResumeRecord}
-              className="transport-btn active"
-              title="Resume Recording"
-              style={{ gap: 5, borderColor: 'var(--accent-pink)' }}
-            >
-              <span className="material-symbols-rounded" style={{ fontSize: 18, color: 'var(--accent-pink)' }}>fiber_manual_record</span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-pink)' }}>Resume Rec</span>
-            </button>
-            {/* Discard / Stop */}
-            <button
-              onClick={onStopRecord}
-              className="transport-btn"
-              title="Finalize Recording"
-              style={{ gap: 5 }}
-            >
-              <span className="material-symbols-rounded" style={{ fontSize: 18 }}>stop</span>
-              <span style={{ fontSize: 11, fontWeight: 700 }}>Done</span>
-            </button>
-          </>
-        ) : (
+        {/* ── GENERAL PLAYBACK CONTROLS ──────────────────────────────── */}
+        {!isRecording && !recordingPaused && (
           <>
             {/* Stop */}
             <button onClick={onStop} className="transport-btn" title="Stop">
@@ -117,8 +71,58 @@ export default function PianoHeader({
               </span>
               {isPlaying ? 'Pause' : 'Play'}
             </button>
+          </>
+        )}
 
-            {/* Record — starts a new track */}
+        {/* ── RECORDING STATE CONTROLS (STABLE WRAPPER) ──────────────── */}
+        <div data-tour="piano-record-btn" style={{ display: 'flex', gap: 5 }}>
+          {isRecording ? (
+            <>
+              {/* Pause Record */}
+              <button
+                onClick={onPauseRecord}
+                className="transport-btn"
+                title="Pause Recording"
+                style={{ gap: 5 }}
+              >
+                <span className="material-symbols-rounded" style={{ fontSize: 18 }}>pause</span>
+                <span style={{ fontSize: 11, fontWeight: 700 }}>Pause Rec</span>
+              </button>
+              {/* Stop Record */}
+              <button
+                onClick={onStopRecord}
+                className="transport-btn record active"
+                title="Stop Recording"
+                style={{ gap: 5 }}
+              >
+                <span className="material-symbols-rounded" style={{ fontSize: 18 }}>stop</span>
+                <span style={{ fontSize: 11, fontWeight: 700 }}>Stop Rec</span>
+              </button>
+            </>
+          ) : recordingPaused ? (
+            <>
+              {/* Resume Record */}
+              <button
+                onClick={onResumeRecord}
+                className="transport-btn active"
+                title="Resume Recording"
+                style={{ gap: 5, borderColor: 'var(--accent-pink)' }}
+              >
+                <span className="material-symbols-rounded" style={{ fontSize: 18, color: 'var(--accent-pink)' }}>fiber_manual_record</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-pink)' }}>Resume Rec</span>
+              </button>
+              {/* Discard / Stop */}
+              <button
+                onClick={onStopRecord}
+                className="transport-btn"
+                title="Finalize Recording"
+                style={{ gap: 5 }}
+              >
+                <span className="material-symbols-rounded" style={{ fontSize: 18 }}>stop</span>
+                <span style={{ fontSize: 11, fontWeight: 700 }}>Done</span>
+              </button>
+            </>
+          ) : (
             <button
               onClick={onRecord}
               className="transport-btn record"
@@ -133,8 +137,8 @@ export default function PianoHeader({
                 {trackCount > 0 ? `REC +${trackCount}` : 'REC'}
               </span>
             </button>
-          </>
-        )}
+          )}
+        </div>
       </div>
 
       {/* ── LCD TIME ─────────────────────────────────────────────────── */}
@@ -186,6 +190,7 @@ export default function PianoHeader({
 
       {/* ── METRONOME ────────────────────────────────────────────────── */}
       <button
+        data-tour="piano-metronome-btn"
         onClick={onMetronomeToggle}
         className={`transport-btn ${metronomeEnabled ? 'active' : ''}`}
         title="Metronome"

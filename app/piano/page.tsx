@@ -161,7 +161,7 @@ export default function PianoPage() {
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '12px 16px', gap: 12, overflow: 'hidden' }}>
 
           {/* Sheet Music — take all available flex-1 space and scroll internally */}
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <div data-tour="sheet-music-stage" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <SheetMusicStage
               tracks={engine.tracks}
               liveNotes={engine.liveNotes}

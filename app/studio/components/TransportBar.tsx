@@ -38,18 +38,25 @@ export default function TransportBar({
       </Link>
 
       {/* Help Button */}
-      <button style={{
-        background: 'none', border: 'none', cursor: 'pointer',
-        color: 'var(--text-secondary)', fontSize: 13, padding: '0 8px', height: 48,
-      }}
+      <button
+        id="tour-help-btn"
+        onClick={() => window.dispatchEvent(new CustomEvent('melodica:start-tour'))}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: 'var(--text-secondary)', fontSize: 13, padding: '0 8px', height: 48,
+          display: 'flex', alignItems: 'center', gap: 4,
+        }}
         onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
         onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
-      >Help</button>
+      >
+        <span className="material-symbols-rounded" style={{ fontSize: 16 }}>help</span>
+        Help
+      </button>
 
       {/* Transport controls */}
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
         {/* Play/Stop Group */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-card)', padding: '2px 8px', borderRadius: 10, border: '1px solid var(--border)' }}>
+        <div data-tour="transport-playback" style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--bg-card)', padding: '2px 8px', borderRadius: 10, border: '1px solid var(--border)' }}>
           <button onClick={onStop} title="Stop" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}>
             <span className="material-symbols-rounded" style={{ fontSize: 20 }}>stop</span>
           </button>

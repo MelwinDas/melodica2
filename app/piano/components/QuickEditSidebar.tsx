@@ -32,7 +32,7 @@ export default function QuickEditSidebar({
   const numBars     = countIn === '2bar' ? 2 : 1;
 
   return (
-    <aside className="sidebar-glass">
+    <aside data-tour="quick-edit-sidebar" className="sidebar-glass">
 
       {/* ── Visual Metronome (count-in only) ──────────────────────── */}
       {countInActive && (
@@ -79,7 +79,7 @@ export default function QuickEditSidebar({
       )}
 
       {/* ── Quantize ─────────────────────────────────────────────── */}
-      <div>
+      <div data-tour="piano-quantize">
         <label style={{ fontSize: 9, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.12em', display: 'block', marginBottom: 5 }}>
           Quantize
         </label>
@@ -106,7 +106,7 @@ export default function QuickEditSidebar({
       </div>
 
       {/* ── Count-In ─────────────────────────────────────────────── */}
-      <div>
+      <div data-tour="piano-count-in">
         <label style={{ fontSize: 9, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.12em', display: 'block', marginBottom: 5 }}>
           Count-In
         </label>
@@ -129,7 +129,7 @@ export default function QuickEditSidebar({
       <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '2px 0' }} />
 
       {/* ── Velocity Meter ───────────────────────────────────────── */}
-      <div>
+      <div data-tour="piano-velocity">
         <label style={{ fontSize: 9, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.12em', display: 'block', marginBottom: 5 }}>
           Velocity
         </label>

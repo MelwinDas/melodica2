@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import OnboardingTour from "./components/OnboardingTour";
 
 export const metadata: Metadata = {
   title: "Melodica – AI That Understands the Soul of Music",
@@ -13,7 +14,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" data-scroll-behavior="smooth">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -24,6 +25,7 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         {children}
+        <OnboardingTour />
       </body>
     </html>
   );

@@ -226,7 +226,7 @@ export default function RightPanel({
   };
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-secondary)' }}>
+    <div data-tour="ai-generate-panel" style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-secondary)' }}>
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
         {[
@@ -234,7 +234,7 @@ export default function RightPanel({
           { id: 'file-upload' as StudioTab, label: 'Upload', icon: 'upload_file' },
           { id: 'file-export' as StudioTab, label: 'Export', icon: 'ios_share' },
         ].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{
+          <button key={t.id} data-tour={t.id === 'file-export' ? 'export-tab-btn' : undefined} onClick={() => setTab(t.id)} style={{
             flex: 1, padding: '12px 8px', border: 'none', cursor: 'pointer',
             background: tab === t.id ? 'rgba(139,92,246,0.1)' : 'transparent',
             color: tab === t.id ? 'var(--accent-purple-light)' : 'var(--text-secondary)',

@@ -331,7 +331,7 @@ function StudioPageContent() {
             <h2 style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               Piano Roll Editor
             </h2>
-            <Link href="/piano" style={{ fontSize: 12, color: 'var(--accent-purple-light)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Link data-tour="open-piano-btn" href="/piano" style={{ fontSize: 12, color: 'var(--accent-purple-light)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
               <span className="material-symbols-rounded" style={{ fontSize: 14 }}>open_in_new</span>
               Open Piano
             </Link>
