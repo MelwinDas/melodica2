@@ -57,6 +57,7 @@ export default function LoginPage() {
           <div>
             <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
               <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Password</label>
+              <Link href="/forgot-password" style={{ fontSize: 12, color: 'var(--accent-purple-light)', textDecoration: 'none' }}>Forgot your password?</Link>
             </div>
             <div style={{ position: 'relative' }}>
               <input id="login-password" type={showPass ? 'text' : 'password'} className="input-field"
