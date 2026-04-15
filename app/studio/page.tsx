@@ -141,46 +141,64 @@ function StudioPageContent() {
       alert("No project ID found. Use the Dashboard to create or open a project first.");
       return;
     }
+    
     setIsSaving(true);
     try {
+      // 1. Check Auth Session
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        throw new Error("Your session has expired. Please log in again.");
+      }
+
+      // 2. Generate MIDI Blob from timeline
       const blob = timelineToMidiBlob({
         notes: timeline.notes,
         bpm: timeline.bpm,
         timeSignature: timeline.timeSignature || [4, 4]
       });
 
-      // Use a consistent filename based on projectId so that upsert: true actually overwrites the same file
+      // 3. Upload to Storage (Overwriting the same project file)
       const fileName = `project_${projectId}.mid`;
       
-      // Upload to Supabase Storage (Assumes 'projects' bucket exists)
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('projects')
         .upload(fileName, blob, { upsert: true });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Storage upload failed:', uploadError);
+        throw new Error(`Failed to upload MIDI data: ${uploadError.message}`);
+      }
 
-      // Get Public URL
+      // 4. Get the stable Public URL
       const { data: { publicUrl } } = supabase.storage
         .from('projects')
         .getPublicUrl(fileName);
 
-      // Update Database
+      // Append a cache-buster query param so the browser doesn't serve an old cached version on reload
+      const finalUrl = `${publicUrl}?v=${Date.now()}`;
+
+      // 5. Update Project Record in DB
       const { error: dbError } = await supabase
         .from('projects')
         .update({ 
-          midi_url: publicUrl,
+          midi_url: finalUrl,
           bpm: Math.round(timeline.bpm),
           updated_at: new Date().toISOString()
         })
         .eq('id', projectId);
 
-      if (dbError) throw dbError;
+      if (dbError) {
+        console.error('Database update failed:', dbError);
+        throw new Error(`Failed to update project data: ${dbError.message}`);
+      }
+
       alert("Project saved successfully!");
     } catch (e: any) {
-      console.error('Save error:', e);
-      alert(`Error saving project: ${e.message || 'Check if "projects" bucket exists in Supabase Storage'}`);
+      console.error('CRITICAL SAVE FAILURE:', e);
+      alert(`Save Error: ${e.message || 'Unknown error occurred. Please check your connection.'}`);
     } finally {
-      setIsSaving(false);
+      setIsSaving(true); // Hold the state for a tiny bit so the user sees the 'Saving...' UI
+      setTimeout(() => setIsSaving(false), 500);
     }
   }, [projectId, timeline.notes, timeline.bpm, timeline.timeSignature, supabase]);
 
