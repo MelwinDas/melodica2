@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { EditTool, SnapGrid } from './lib/types';
 
 const MIN_LEFT_PCT = 25;
@@ -18,6 +18,7 @@ import RightPanel from './components/RightPanel';
 import { createClient } from '../../lib/supabase';
 
 function StudioPageContent() {
+  const pathname = usePathname();
   // ── Core hooks ─────────────────────────────────────────────────────────
   const { pushCommand, undo, redo, canUndo, canRedo, clear: clearHistory } = useUndoRedo();
   const timeline = useTimelineState(pushCommand);
@@ -31,9 +32,13 @@ function StudioPageContent() {
   const [backendAlive, setBackendAlive] = useState<boolean | null>(null);
   const [playheadSeconds, setPlayheadSeconds] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('My Piano Recording');
+  const [creationError, setCreationError] = useState('');
 
   const supabase = createClient();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const projectId = searchParams.get('id');
 
   // ── Split Panel Resizing ─────────────────────────────────────────────
@@ -136,9 +141,14 @@ function StudioPageContent() {
     setPlayheadSeconds(0);
   }, [timeline.loadTimeline, clearHistory]);
 
-  const handleSave = useCallback(async () => {
-    if (!projectId) {
-      alert("No project ID found. Use the Dashboard to create or open a project first.");
+  const handleSave = useCallback(async (forcedId?: string | any) => {
+    // If called via onClick, forcedId might be the React SyntheticEvent object.
+    // We only want to use it if it's a genuine string ID.
+    const cleanId = typeof forcedId === 'string' ? forcedId : null;
+    const idToSave = cleanId || projectId;
+
+    if (!idToSave) {
+      setShowCreateModal(true);
       return;
     }
     
@@ -157,8 +167,8 @@ function StudioPageContent() {
         timeSignature: timeline.timeSignature || [4, 4]
       });
 
-      // 3. Upload to Storage (Overwriting the same project file)
-      const fileName = `project_${projectId}.mid`;
+      // 3. Upload to Storage (Using the targeted ID)
+      const fileName = `project_${idToSave}.mid`;
       
       const { error: uploadError } = await supabase.storage
         .from('projects')
@@ -174,7 +184,6 @@ function StudioPageContent() {
         .from('projects')
         .getPublicUrl(fileName);
 
-      // Append a cache-buster query param so the browser doesn't serve an old cached version on reload
       const finalUrl = `${publicUrl}?v=${Date.now()}`;
 
       // 5. Update Project Record in DB
@@ -185,7 +194,7 @@ function StudioPageContent() {
           bpm: Math.round(timeline.bpm),
           updated_at: new Date().toISOString()
         })
-        .eq('id', projectId);
+        .eq('id', idToSave);
 
       if (dbError) {
         console.error('Database update failed:', dbError);
@@ -195,12 +204,73 @@ function StudioPageContent() {
       alert("Project saved successfully!");
     } catch (e: any) {
       console.error('CRITICAL SAVE FAILURE:', e);
-      alert(`Save Error: ${e.message || 'Unknown error occurred. Please check your connection.'}`);
+      alert(`Save Error: ${e.message || 'Unknown error occurred.'}`);
     } finally {
-      setIsSaving(true); // Hold the state for a tiny bit so the user sees the 'Saving...' UI
+      setIsSaving(true);
       setTimeout(() => setIsSaving(false), 500);
     }
   }, [projectId, timeline.notes, timeline.bpm, timeline.timeSignature, supabase]);
+
+  const handleConfirmCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProjectName.trim()) return;
+    
+    setCreationError('');
+    setIsSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("No user found");
+
+      // 1. Get or Create 'Recording' folder
+      let targetFolderId = null;
+      const { data: existingFolders } = await supabase
+        .from('folders')
+        .select('id')
+        .eq('name', 'Recording')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (existingFolders) {
+        targetFolderId = existingFolders.id;
+      } else {
+        const { data: newFolder, error: folderErr } = await supabase
+          .from('folders')
+          .insert({ name: 'Recording', user_id: user.id })
+          .select()
+          .single();
+        if (!folderErr && newFolder) {
+          targetFolderId = newFolder.id;
+        }
+      }
+
+      // 2. Create the project record
+      const { data, error } = await supabase.from('projects').insert({
+        name: newProjectName.trim(),
+        user_id: user.id,
+        folder_id: targetFolderId,
+        bpm: Math.round(timeline.bpm),
+        updated_at: new Date().toISOString()
+      }).select().single();
+
+      if (error) throw error;
+      if (!data) throw new Error("Failed to create project record");
+
+      // 3. Close modal
+      setShowCreateModal(false);
+
+      // 4. Update URL without refreshing
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('id', data.id);
+      router.replace(`${pathname}?${params.toString()}`);
+
+      // 5. Trigger the actual save (upload MIDI) using the new ID
+      await handleSave(data.id);
+    } catch (err: any) {
+      setCreationError(err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────
   useEffect(() => {
@@ -348,7 +418,7 @@ function StudioPageContent() {
           timeline.setBpm(b);
           audio.setPlaybackBpm(b);
         }}
-        onSave={projectId ? handleSave : undefined}
+        onSave={handleSave}
         isSaving={isSaving}
       />
 
@@ -504,6 +574,57 @@ function StudioPageContent() {
           )}
         </div>
       </div>
+
+      {/* Create Project Modal */}
+      {showCreateModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001 }}>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, width: '100%', maxWidth: 400, padding: '32px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
+            <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 20, fontWeight: 800, marginBottom: 8, color: 'var(--text-primary)' }}>Save Your Work</h2>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24 }}>Give your new project a name to save it to your dashboard.</p>
+            
+            <form onSubmit={handleConfirmCreate} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Project Name</label>
+                <input 
+                  autoFocus
+                  style={{ width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px', color: 'white', fontSize: 14, outline: 'none' }}
+                  placeholder="e.g. Moonlight Sonata Remix"
+                  value={newProjectName}
+                  onChange={e => setNewProjectName(e.target.value)}
+                />
+              </div>
+
+              {creationError && <p style={{ color: '#f87171', fontSize: 12 }}>{creationError}</p>}
+
+              <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                <button 
+                  type="button" 
+                  onClick={() => setShowCreateModal(false)}
+                  style={{ flex: 1, padding: '12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600 }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isSaving || !newProjectName.trim()}
+                  style={{ 
+                    flex: 1, padding: '12px', background: 'var(--accent-purple)', border: 'none', borderRadius: 10, cursor: 'pointer', color: 'white', fontSize: 13, fontWeight: 700,
+                    opacity: (isSaving || !newProjectName.trim()) ? 0.6 : 1,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 
+                  }}
+                >
+                  {isSaving ? (
+                     <span className="material-symbols-rounded" style={{ fontSize: 18, animation: 'spin 1s linear infinite' }}>sync</span>
+                  ) : (
+                    <span className="material-symbols-rounded" style={{ fontSize: 18 }}>save</span>
+                  )}
+                  {isSaving ? 'Creating...' : 'Save & Create'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
