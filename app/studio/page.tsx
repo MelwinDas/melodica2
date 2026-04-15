@@ -280,11 +280,18 @@ function StudioPageContent() {
       const buf = await blob.arrayBuffer();
       const { storeMidiInLocalStorage } = await import('./lib/midiIO');
       storeMidiInLocalStorage(buf, 'studio_preview.mid');
-      window.open('/sheet-music', '_blank');
+
+      const params = new URLSearchParams();
+      if (projectId) params.set('id', projectId);
+      const midiUrl = searchParams.get('midi');
+      if (midiUrl) params.set('midi', midiUrl);
+      
+      const qs = params.toString();
+      window.open('/sheet-music' + (qs ? '?' + qs : ''), '_blank');
     } catch (e) {
       console.error(e);
     }
-  }, [timeline.notes.length, handleExportMidi]);
+  }, [timeline.notes.length, handleExportMidi, projectId, searchParams]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'var(--bg-primary)' }}>

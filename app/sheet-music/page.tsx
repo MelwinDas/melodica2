@@ -1,65 +1,107 @@
 'use client';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Midi } from '@tonejs/midi';
-import { midiBufferToMusicXml, noteEntriesToMusicXml } from '../utils/midiToMusicXml';
+import { midiBufferToMusicXml } from '../utils/midiToMusicXml';
 
-// OSMD and Tone are browser-only
+// OSMD is browser-only
 const OsmdViewer = dynamic(() => import('../components/OsmdViewer'), { ssr: false });
 
 interface NoteEntry { pitch: string; duration: string; }
 
-// Semitone transpose (for the note-editor panel)
-const SEMITONES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-function transposeNote(note: string, delta: number): string {
-  const m = note.match(/^([A-G]#?)(\d)$/);
-  if (!m) return note;
-  const idx = SEMITONES.indexOf(m[1]);
-  if (idx === -1) return note;
-  let ni = idx + delta, oct = parseInt(m[2]);
-  while (ni >= 12) { ni -= 12; oct++; }
-  while (ni < 0) { ni += 12; oct--; }
-  return `${SEMITONES[ni]}${oct}`;
-}
+function SheetMusicContent() {
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get('id');
+  const midiFromUrl = searchParams.get('midi');
 
-// Build MusicXML from NoteEntry[]
-function notesToXml(notes: NoteEntry[]): string {
-  return noteEntriesToMusicXml(notes);
-}
-
-export default function SheetMusicPage() {
-  const [zoom, setZoom] = useState(1.0);
-  // Start empty — content is loaded from localStorage on mount (no placeholder flash)
-  const [notes, setNotes] = useState<NoteEntry[]>([]);
-  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
-  const [isDirty, setIsDirty] = useState(false);
   const [uploadedName, setUploadedName] = useState<string | null>(null);
   const [musicXml, setMusicXml] = useState<string>('');
+  const [noteCount, setNoteCount] = useState(0);
+  const [isDownloading, setIsDownloading] = useState(false);
 
-  // Hold original file blob for export fallback
-  const sourceBlobRef = useRef<Blob | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // ── Download sheet as Image ─────────────────────────────────────────────
+  const handleDownload = async () => {
+    if (!musicXml || isDownloading) return;
+    
+    setIsDownloading(true);
+    await new Promise(r => setTimeout(r, 800)); // Feedback delay
 
-  // Playback
-  const [isPlaying, setIsPlaying] = useState(false);
-  const synthRef = useRef<import('tone').PolySynth | null>(null);
+    try {
+      // Find all canvases rendered by OSMD (one per page)
+      const container = document.querySelector('.osmd-render-container');
+      const canvases = container?.querySelectorAll('canvas');
+      
+      if (!canvases || canvases.length === 0) {
+        alert("Wait for the sheet to render completely before downloading.");
+        setIsDownloading(false);
+        return;
+      }
 
-  // Generate XML whenever notes change (for manual note editor only)
-  useEffect(() => {
-    if (notes.length > 0 && !musicXml) {
-      setMusicXml(notesToXml(notes));
+      // Calculate combined dimensions
+      let totalHeight = 0;
+      let maxWidth = 0;
+      canvases.forEach(c => {
+        totalHeight += c.height;
+        if (c.width > maxWidth) maxWidth = c.width;
+      });
+
+      // Create a master canvas to merge pages
+      const masterCanvas = document.createElement('canvas');
+      masterCanvas.width = maxWidth;
+      masterCanvas.height = totalHeight;
+      const ctx = masterCanvas.getContext('2d');
+
+      if (ctx) {
+        // Fill white background (Canvas is transparent by default)
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, masterCanvas.width, masterCanvas.height);
+
+        // Draw each page vertically
+        let currentY = 0;
+        canvases.forEach(c => {
+          ctx.drawImage(c, (maxWidth - c.width) / 2, currentY);
+          currentY += c.height;
+        });
+        
+        // Export to PNG
+        const pngUrl = masterCanvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        const fileName = (uploadedName?.replace(/\.(mid|midi)$/i, '') || 'Melodica_Score');
+        a.href = pngUrl;
+        a.download = `${fileName}.png`;
+        a.click();
+      }
+      setIsDownloading(false);
+    } catch (e) {
+      console.error('[sheet-music] Download failed', e);
+      setIsDownloading(false);
     }
-  }, [notes, musicXml]);
+  };
+
+  // ── MIDI upload ─────────────────────────────────────────────────────────
+  const handleMidiUpload = useCallback(async (file: File) => {
+    setUploadedName(file.name);
+    try {
+      const buf = await file.arrayBuffer();
+
+      // Build MusicXML directly from the raw MIDI buffer
+      const xml = midiBufferToMusicXml(buf);
+      setMusicXml(xml);
+
+      // Count notes for the subtitle
+      const midi = new Midi(buf);
+      let count = 0;
+      for (const track of midi.tracks) count += track.notes.length;
+      setNoteCount(count);
+    } catch (e) { console.error('[sheet-music] MIDI parse error', e); }
+  }, []);
 
   // On mount: load MIDI from localStorage
-  // Priority order:
-  //   1. melodica_piano_notes (fresh piano recording — overrides stale MIDI)
-  //   2. melodica_midi_base64 (MIDI file from studio upload/navigation)
   useEffect(() => {
     const pianoNotes = localStorage.getItem('melodica_piano_notes');
     if (pianoNotes) {
-      // Piano recording takes priority — clear stale studio MIDI
       localStorage.removeItem('melodica_piano_notes');
       localStorage.removeItem('melodica_midi_base64');
       localStorage.removeItem('melodica_midi_name');
@@ -67,7 +109,6 @@ export default function SheetMusicPage() {
         try {
           const parsed = JSON.parse(pianoNotes) as NoteEntry[];
           if (Array.isArray(parsed) && parsed.length > 0) {
-            // Convert NoteEntry[] to a proper MIDI file so midiBufferToMusicXml can parse it accurately
             const { Midi: ToneMidi } = await import('@tonejs/midi');
             const midi = new ToneMidi();
             const track = midi.addTrack();
@@ -98,258 +139,141 @@ export default function SheetMusicPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── MIDI upload ─────────────────────────────────────────────────────────
-  const handleMidiUpload = useCallback(async (file: File) => {
-    setUploadedName(file.name);
-    setIsDirty(false);
-    try {
-      const buf = await file.arrayBuffer();
-      sourceBlobRef.current = new Blob([buf], { type: 'audio/midi' });
-
-      // Build MusicXML directly from the raw MIDI buffer
-      const xml = midiBufferToMusicXml(buf);
-      setMusicXml(xml);
-
-      // Also extract NoteEntry[] for the note pills editor
-      const midi = new Midi(buf);
-      const FLAT_TO_SHARP: Record<string, string> = {
-        'Bb': 'A#', 'Db': 'C#', 'Eb': 'D#', 'Gb': 'F#', 'Ab': 'G#',
-      };
-      const extracted: NoteEntry[] = [];
-      for (const track of midi.tracks) {
-        for (const note of track.notes) {
-          const m = note.name.match(/^([A-G]b?)(\d)$/);
-          let pitch = note.name;
-          if (m && FLAT_TO_SHARP[m[1]]) pitch = `${FLAT_TO_SHARP[m[1]]}${m[2]}`;
-          extracted.push({ pitch, duration: 'q' });
-          if (extracted.length >= 64) break;
-        }
-        if (extracted.length > 0) break;
-      }
-      if (extracted.length > 0) setNotes(extracted);
-    } catch (e) { console.error('[sheet-music] MIDI parse error', e); }
-  }, []);
-
-  // ── Note operations ─────────────────────────────────────────────────────
-  const deleteSelected = useCallback(() => {
-    if (selectedIdx === null) return;
-    setNotes(p => p.filter((_, i) => i !== selectedIdx));
-    setSelectedIdx(null); setIsDirty(true);
-  }, [selectedIdx]);
-
-  const transposeSelected = useCallback((delta: number) => {
-    if (selectedIdx === null) return;
-    setNotes(p => p.map((n, i) => i === selectedIdx ? { ...n, pitch: transposeNote(n.pitch, delta) } : n));
-    setIsDirty(true);
-  }, [selectedIdx]);
-
-  const changeDuration = useCallback((dur: string) => {
-    if (selectedIdx === null) return;
-    setNotes(p => p.map((n, i) => i === selectedIdx ? { ...n, duration: dur } : n));
-    setIsDirty(true);
-  }, [selectedIdx]);
-
-  // ── Playback ────────────────────────────────────────────────────────────
-  const handlePlay = async () => {
-    if (isPlaying) { synthRef.current?.dispose(); synthRef.current = null; setIsPlaying(false); return; }
-    const Tone = await import('tone');
-    await Tone.start();
-    const synth = new Tone.PolySynth(Tone.Synth, {
-      oscillator: { type: 'triangle' },
-      envelope: { attack: 0.02, decay: 0.1, sustain: 0.5, release: 0.8 },
-    }).toDestination();
-    synthRef.current = synth;
-
-    if (!isDirty && sourceBlobRef.current) {
-       // Play the actual multi-track MIDI file accurately
-       const buf = await sourceBlobRef.current.arrayBuffer();
-       const midi = new Midi(buf);
-       const now = Tone.now() + 0.1;
-       let maxTime = 0;
-       midi.tracks.forEach(track => {
-         track.notes.forEach(note => {
-           synth.triggerAttackRelease(note.name, note.duration, now + note.time, note.velocity);
-           if (note.time + note.duration > maxTime) maxTime = note.time + note.duration;
-         });
-       });
-       setIsPlaying(true);
-       setTimeout(() => { synth.dispose(); synthRef.current = null; setIsPlaying(false); }, (maxTime + 1) * 1000);
-    } else {
-       // Fallback to playing the rudimentary sequence
-       notes.slice(0, 64).forEach((n, i) => synth.triggerAttackRelease(n.pitch, '8n', Tone.now() + i * 0.35));
-       setIsPlaying(true);
-       setTimeout(() => { synth.dispose(); synthRef.current = null; setIsPlaying(false); }, notes.length * 350 + 800);
-    }
-  };
-
-  const handleStop = () => { synthRef.current?.dispose(); synthRef.current = null; setIsPlaying(false); };
-
-  // ── Export MIDI ─────────────────────────────────────────────────────────
-  const handleExport = async () => {
-    let blob: Blob;
-    const filename = (uploadedName ?? 'melodica_score').replace(/\.(mid|midi)$/i, '') + '_export.mid';
-
-    if (!isDirty && sourceBlobRef.current) {
-      blob = sourceBlobRef.current; // return the original unchanged file
-    } else {
-      const midi = new Midi();
-      const track = midi.addTrack();
-      notes.forEach((n, i) => {
-        const STEP_TO_MIDI: Record<string, number> = { C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11 };
-        const mv = n.pitch.match(/^([A-G]#?)(\d)$/);
-        const midiNum = mv ? (parseInt(mv[2]) + 1) * 12 + (STEP_TO_MIDI[mv[1]] ?? 0) : 60;
-        track.addNote({ midi: midiNum, time: i * 0.5, duration: 0.4, velocity: 0.8 });
-      });
-      blob = new Blob([new Uint8Array(midi.toArray())], { type: 'audio/midi' });
-    }
-
-    if ('showSaveFilePicker' in window) {
-      try {
-        const handle = await (window as Window & { showSaveFilePicker: (o: object) => Promise<FileSystemFileHandle> })
-          .showSaveFilePicker({ suggestedName: filename, types: [{ description: 'MIDI', accept: { 'audio/midi': ['.mid'] } }] });
-        const w = await handle.createWritable(); await w.write(blob); await w.close();
-      } catch { /* AbortError */ }
-    } else {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
-      URL.revokeObjectURL(url);
-    }
-  };
-
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-primary)', display: 'flex', flexDirection: 'column' }}>
-      {/* Nav */}
-      <nav style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)', padding: '0 20px', display: 'flex', alignItems: 'center', height: 52, gap: 6 }}>
-        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8, marginRight: 20 }}>
-          <span className="material-symbols-rounded" style={{ color: 'var(--accent-purple)', fontSize: 22 }}>piano</span>
-          <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 18 }}>Melodica</span>
-        </Link>
-        {[{ label: 'Studio', href: '/studio' }, { label: 'Piano', href: '/piano' }].map(l => (
-          <Link key={l.label} href={l.href}
-            style={{ marginRight: 16, textDecoration: 'none', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 500 }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-primary)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-secondary)')}
-          >{l.label}</Link>
-        ))}
+    <>
+      {/* Print styles – hide nav, show only sheet */}
+      <style>{`
+        @media print {
+          .sheet-nav { display: none !important; }
+          body { background: white !important; }
+        }
+      `}</style>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          {isDirty && <span className="badge" style={{ background: 'rgba(245,158,11,0.15)', color: '#fbbf24', borderColor: 'rgba(245,158,11,0.3)' }}>Unsaved</span>}
+      <div style={{ minHeight: '100vh', background: '#f0eff8', display: 'flex', flexDirection: 'column' }}>
 
-          {/* Play / Stop */}
-          <button onClick={handlePlay} style={{ background: isPlaying ? 'rgba(20,184,166,0.15)' : 'var(--bg-card)', border: `1px solid ${isPlaying ? 'var(--accent-teal)' : 'var(--border)'}`, borderRadius: 8, padding: '7px 14px', cursor: 'pointer', color: isPlaying ? 'var(--accent-teal-light)' : 'var(--text-secondary)', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span className="material-symbols-rounded" style={{ fontSize: 16 }}>{isPlaying ? 'pause' : 'play_arrow'}</span>
-            {isPlaying ? 'Pause' : 'Play'}
+        {/* ── Top nav ── */}
+        <nav className="sheet-nav" style={{
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--bg-secondary)',
+          backdropFilter: 'blur(12px)',
+          padding: '0 24px',
+          display: 'flex',
+          alignItems: 'center',
+          height: 56,
+          gap: 24,
+          flexShrink: 0,
+          zIndex: 100,
+        }}>
+          {/* Melodica logo + name */}
+          <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+            <span className="material-symbols-rounded" style={{ color: 'var(--accent-purple-light)', fontSize: 24 }}>piano</span>
+            <span style={{
+              fontFamily: "'Space Grotesk', sans-serif",
+              fontWeight: 700, fontSize: 19, color: 'var(--text-primary)',
+              letterSpacing: '-0.02em',
+            }}>Melodica</span>
+          </Link>
+
+          {/* Back to Studio */}
+          <Link
+            href={projectId ? `/studio?id=${projectId}${midiFromUrl ? `&midi=${encodeURIComponent(midiFromUrl)}` : ''}` : '/studio'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              textDecoration: 'none', color: 'var(--text-secondary)',
+              fontSize: 13, fontWeight: 600, transition: 'all 0.2s ease',
+              padding: '8px 14px', borderRadius: 10,
+              border: '1px solid var(--border)',
+              background: 'var(--bg-card)',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.color = 'var(--text-primary)';
+              e.currentTarget.style.borderColor = 'var(--accent-purple)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.color = 'var(--text-secondary)';
+              e.currentTarget.style.borderColor = 'var(--border)';
+            }}
+          >
+            <span className="material-symbols-rounded" style={{ fontSize: 18 }}>arrow_back</span>
+            Piano Roll
+          </Link>
+
+          <div style={{ flex: 1 }} />
+
+          {/* Download sheet */}
+          <button
+            onClick={handleDownload}
+            disabled={isDownloading || !musicXml}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: isDownloading ? 'var(--bg-card)' : 'linear-gradient(135deg, var(--accent-purple), #6d28d9)',
+              border: 'none', borderRadius: 10,
+              padding: '10px 20px', cursor: isDownloading ? 'not-allowed' : 'pointer',
+              color: 'white', fontSize: 14, fontWeight: 700,
+              boxShadow: isDownloading ? 'none' : '0 4px 15px rgba(139,92,246,0.3)',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              opacity: !musicXml ? 0.5 : 1,
+            }}
+            onMouseEnter={e => {
+              if (!isDownloading) {
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(139,92,246,0.45)';
+              }
+            }}
+            onMouseLeave={e => {
+              if (!isDownloading) {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 15px rgba(139,92,246,0.3)';
+              }
+            }}
+          >
+            {isDownloading ? (
+              <>
+                <span className="material-symbols-rounded" style={{ fontSize: 18, animation: 'spin 1s linear infinite' }}>progress_activity</span>
+                Processing...
+              </>
+            ) : (
+              <>
+                <span className="material-symbols-rounded" style={{ fontSize: 18 }}>download</span>
+                Download Sheet
+              </>
+            )}
           </button>
-          <button onClick={handleStop} disabled={!isPlaying} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 11px', cursor: 'pointer', color: 'var(--text-secondary)', opacity: isPlaying ? 1 : 0.4 }}>
-            <span className="material-symbols-rounded" style={{ fontSize: 16 }}>stop</span>
-          </button>
+        </nav>
 
-          {/* Upload MIDI */}
-          <button onClick={() => fileInputRef.current?.click()} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', color: uploadedName ? 'var(--accent-teal-light)' : 'var(--text-secondary)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, maxWidth: 200, overflow: 'hidden' }}>
-            <span className="material-symbols-rounded" style={{ fontSize: 16, flexShrink: 0 }}>upload_file</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{uploadedName ?? 'Load MIDI'}</span>
-          </button>
-          <input ref={fileInputRef} type="file" accept=".mid,.midi" style={{ display: 'none' }}
-            onChange={e => { const f = e.target.files?.[0]; if (f) handleMidiUpload(f); e.currentTarget.value = ''; }}
-          />
-
-          {/* Export */}
-          <button onClick={handleExport} style={{ background: 'var(--accent-purple)', border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', color: 'white', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span className="material-symbols-rounded" style={{ fontSize: 16 }}>ios_share</span>
-            Export MIDI
-          </button>
-        </div>
-      </nav>
-
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Left settings panel */}
-        <div style={{ width: 210, background: 'var(--bg-secondary)', borderRight: '1px solid var(--border)', padding: '18px 14px', overflowY: 'auto', flexShrink: 0 }}>
-          <h3 style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>Notation</h3>
-
-          {/* Zoom */}
-          <div style={{ marginBottom: 18 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-              <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Zoom</p>
-              <span style={{ fontSize: 11, color: 'var(--accent-purple-light)' }}>{Math.round(zoom * 100)}%</span>
-            </div>
-            <input type="range" min={0.5} max={2.0} step={0.05} value={zoom} onChange={e => setZoom(Number(e.target.value))} style={{ width: '100%', accentColor: 'var(--accent-purple)' }} />
-          </div>
-
-          {/* Note editor */}
-          {selectedIdx !== null && notes[selectedIdx] && (
-            <div style={{ marginTop: 4, background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 10, padding: '12px' }}>
-              <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-purple-light)', marginBottom: 10 }}>Edit Note #{selectedIdx + 1}</p>
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Pitch: <strong style={{ color: 'var(--text-primary)' }}>{notes[selectedIdx].pitch}</strong></p>
-              <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-                <button onClick={() => transposeSelected(1)} style={{ flex: 1, padding: '6px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12 }}>↑ +1</button>
-                <button onClick={() => transposeSelected(-1)} style={{ flex: 1, padding: '6px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12 }}>↓ -1</button>
-              </div>
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Duration</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginBottom: 10 }}>
-                {[['q', 'Quarter'], ['h', 'Half'], ['w', 'Whole'], ['8', 'Eighth']].map(([val, label]) => (
-                  <button key={val} onClick={() => changeDuration(val)}
-                    style={{ padding: '5px 4px', background: notes[selectedIdx]?.duration === val ? 'rgba(139,92,246,0.3)' : 'var(--bg-card)', border: `1px solid ${notes[selectedIdx]?.duration === val ? 'var(--accent-purple)' : 'var(--border)'}`, borderRadius: 6, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 10 }}>{label}</button>
-                ))}
-              </div>
-              <button onClick={deleteSelected}
-                style={{ width: '100%', padding: '7px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, cursor: 'pointer', color: '#f87171', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                <span className="material-symbols-rounded" style={{ fontSize: 14 }}>delete</span>Delete
-              </button>
-            </div>
-          )}
-
-          <div style={{ marginTop: 18, fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.9 }}>
-            <strong style={{ color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>Quick Help</strong>
-            Click a note pill to select<br />
-            ↑/↓ transpose by semitone<br />
-            Del removes selected note
-          </div>
-        </div>
-
-        {/* Sheet music area (OSMD) */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '28px 32px', background: '#f0eff8', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        {/* ── Sheet music area ── */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '40px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           {/* Title */}
           <div style={{ textAlign: 'center', marginBottom: 22, width: '100%', maxWidth: 860 }}>
             <h2 style={{ fontFamily: 'serif', fontSize: 22, color: '#1a1830', marginBottom: 4 }}>
               {uploadedName ? uploadedName.replace(/\.(mid|midi)$/i, '') : 'Melodica Score'}
             </h2>
             <p style={{ fontSize: 12, color: '#6b6890', fontStyle: 'italic' }}>
-              {notes.length} notes · C Major · 4/4{isDirty && ' · ✎ Edited'}
+              {noteCount} notes · C Major · 4/4
             </p>
           </div>
 
-          {/* OSMD sheet music — whole score */}
-          <div style={{ background: 'white', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', padding: '24px', width: '100%', maxWidth: 860, marginBottom: 20 }}>
-            {musicXml ? (
-              <OsmdViewer musicXml={musicXml} zoom={zoom} drawTitle={false} />
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 120 }}>
-                <p style={{ color: '#9d99bb', fontSize: 14 }}>Generating notation…</p>
-              </div>
-            )}
-          </div>
-
-          {/* Note pills */}
-          {notes.length > 0 && (
-            <div style={{ background: 'white', borderRadius: 12, padding: '14px 20px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)', width: '100%', maxWidth: 860, marginBottom: 12 }}>
-              <p style={{ fontSize: 11, color: '#6b6890', marginBottom: 10, fontWeight: 600 }}>NOTES — click to select &amp; edit</p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {notes.map((n, i) => (
-                  <button key={i} onClick={() => setSelectedIdx(selectedIdx === i ? null : i)}
-                    style={{
-                      padding: '3px 10px', borderRadius: 6, fontSize: 11, fontFamily: 'monospace', cursor: 'pointer',
-                      background: selectedIdx === i ? 'rgba(139,92,246,0.25)' : '#f0eeff',
-                      border: `1px solid ${selectedIdx === i ? '#8b5cf6' : '#c5c0e8'}`,
-                      color: selectedIdx === i ? '#6d28d9' : '#4a4870',
-                      fontWeight: selectedIdx === i ? 700 : 400, transition: 'all 0.15s',
-                    }}
-                  >{n.pitch}</button>
-                ))}
-              </div>
+          <div className="osmd-render-container" style={{ width: '100%', maxWidth: 860 }}>
+            <div style={{ background: 'white', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', padding: '24px' }}>
+              {musicXml ? (
+                <OsmdViewer musicXml={musicXml} zoom={1.0} drawTitle={false} />
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 120 }}>
+                  <p style={{ color: '#9d99bb', fontSize: 14 }}>Generating notation…</p>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
-    </div>
+    </>
+  );
+}
+
+export default function SheetMusicPage() {
+  return (
+    <Suspense fallback={null}>
+      <SheetMusicContent />
+    </Suspense>
   );
 }

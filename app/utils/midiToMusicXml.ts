@@ -191,37 +191,63 @@ export function midiBufferToMusicXml(buffer: ArrayBuffer): string {
   const midi = new Midi(buffer);
   const bpm = midi.header.tempos.length > 0 ? midi.header.tempos[0].bpm : 120;
 
-  const trebleNotes: MxmlNote[] = [];
-  const bassNotes:   MxmlNote[] = [];
+  // Helper to process a list of notes into a timed sequence (including rests)
+  const processNotes = (notes: { midi: number; time: number; duration: number }[], clef: 'treble' | 'bass') => {
+    const sorted = [...notes].sort((a, b) => a.time - b.time);
+    const result: MxmlNote[] = [];
+    let currentTime = 0;
+
+    for (const n of sorted) {
+      // 1. Add rest if there's a gap
+      if (n.time > currentTime + 0.01) {
+        const gap = n.time - currentTime;
+        const { divs, type } = snapToDivisions(gap, bpm);
+        if (divs > 0) {
+          result.push({ step: 'C', alter: 0, octave: 4, durationDivs: divs, type, isRest: true });
+        }
+      }
+
+      // 2. Add the note
+      const { step, alter, octave } = midiNumToStep(n.midi);
+      const { divs, type } = snapToDivisions(n.duration, bpm);
+      if (divs > 0) {
+        result.push({ step, alter, octave, durationDivs: divs, type, isRest: false });
+        // Only advance time if this note ends after our current cursor (simple voice handling)
+        currentTime = Math.max(currentTime, n.time + n.duration);
+      }
+    }
+    return result;
+  };
+
+  const trebleRaw: { midi: number; time: number; duration: number }[] = [];
+  const bassRaw:   { midi: number; time: number; duration: number }[] = [];
 
   for (const track of midi.tracks) {
     for (const note of track.notes) {
-      const { step, alter, octave } = midiNumToStep(note.midi);
-      const { divs, type } = snapToDivisions(note.duration, bpm);
-      const mxNote: MxmlNote = { step, alter, octave, durationDivs: divs, type, isRest: false };
-      // Split at middle C (MIDI 60): treble ≥ 60, bass < 60
-      if (note.midi >= 60) trebleNotes.push(mxNote);
-      else                 bassNotes.push(mxNote);
+      if (note.midi >= 60) trebleRaw.push({ midi: note.midi, time: note.time, duration: note.duration });
+      else                 bassRaw.push({ midi: note.midi, time: note.time, duration: note.duration });
     }
   }
 
-  if (trebleNotes.length === 0 && bassNotes.length === 0) {
-    trebleNotes.push({ step: 'B', alter: 0, octave: 4, durationDivs: MEASURE_DIVS, type: 'whole', isRest: true });
+  const trebleProcessed = processNotes(trebleRaw, 'treble');
+  const bassProcessed   = processNotes(bassRaw, 'bass');
+
+  if (trebleProcessed.length === 0 && bassProcessed.length === 0) {
+    trebleProcessed.push({ step: 'B', alter: 0, octave: 4, durationDivs: MEASURE_DIVS, type: 'whole', isRest: true });
   }
 
-  const hasTreble = trebleNotes.length > 0;
-  const hasBass   = bassNotes.length > 0;
+  const hasTreble = trebleProcessed.length > 0;
+  const hasBass   = bassProcessed.length > 0;
 
   if (hasTreble && hasBass) {
-    // Grand staff
     return grandStaffXml(
-      buildMeasures(trebleNotes, 'G', 2),
-      buildMeasures(bassNotes,   'F', 4)
+      buildMeasures(trebleProcessed, 'G', 2),
+      buildMeasures(bassProcessed,   'F', 4)
     );
   } else if (hasBass) {
-    return singleStaffXml(buildMeasures(bassNotes, 'F', 4), 'F', 4);
+    return singleStaffXml(buildMeasures(bassProcessed, 'F', 4), 'F', 4);
   } else {
-    return singleStaffXml(buildMeasures(trebleNotes, 'G', 2), 'G', 2);
+    return singleStaffXml(buildMeasures(trebleProcessed, 'G', 2), 'G', 2);
   }
 }
 
@@ -240,38 +266,50 @@ export function noteEntriesToMusicXml(
   const PITCH_RE = /^([A-G])(#?)(\d)$/;
   const STEP_TO_MIDI: Record<string, number> = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 };
 
-  const trebleNotes: MxmlNote[] = [];
-  const bassNotes:   MxmlNote[] = [];
-
-  for (const n of notes) {
-    const { type, divs } = DUR_TYPE[n.duration] ?? DUR_TYPE['q'];
-    const m = n.pitch.match(PITCH_RE);
-    let midiNum = 60; // default middle C
-    if (m) {
-      const [, letter, sharp, octStr] = m;
-      midiNum = (parseInt(octStr) + 1) * 12 + STEP_TO_MIDI[letter] + (sharp ? 1 : 0);
+  const processEntries = (rawNotes: { pitch: string; duration: string }[]) => {
+    const result: MxmlNote[] = [];
+    for (const n of rawNotes) {
+      const { type, divs } = DUR_TYPE[n.duration] ?? DUR_TYPE['q'];
+      const m = n.pitch.match(PITCH_RE);
+      let midiNum = 60;
+      if (m) {
+        const [, letter, sharp, octStr] = m;
+        midiNum = (parseInt(octStr) + 1) * 12 + STEP_TO_MIDI[letter] + (sharp ? 1 : 0);
+      }
+      const { step, alter, octave } = midiNumToStep(midiNum);
+      result.push({ step, alter, octave, durationDivs: divs, type, isRest: false });
     }
-    const { step, alter, octave } = midiNumToStep(midiNum);
-    const mxNote: MxmlNote = { step, alter, octave, durationDivs: divs, type, isRest: false };
-    if (midiNum >= 60) trebleNotes.push(mxNote);
-    else               bassNotes.push(mxNote);
+    return result;
+  };
+
+  const trebleRaw = notes.filter(n => {
+    const m = n.pitch.match(PITCH_RE);
+    if (!m) return true;
+    const midiNum = (parseInt(m[3]) + 1) * 12 + STEP_TO_MIDI[m[1]] + (m[2] ? 1 : 0);
+    return midiNum >= 60;
+  });
+  const bassRaw = notes.filter(n => {
+    const m = n.pitch.match(PITCH_RE);
+    if (!m) return false;
+    const midiNum = (parseInt(m[3]) + 1) * 12 + STEP_TO_MIDI[m[1]] + (m[2] ? 1 : 0);
+    return midiNum < 60;
+  });
+
+  const trebleProcessed = processEntries(trebleRaw);
+  const bassProcessed   = processEntries(bassRaw);
+
+  if (trebleProcessed.length === 0 && bassProcessed.length === 0) {
+    trebleProcessed.push({ step: 'C', alter: 0, octave: 4, durationDivs: DIVISIONS, type: 'quarter', isRest: true });
   }
 
-  if (trebleNotes.length === 0 && bassNotes.length === 0) {
-    trebleNotes.push({ step: 'C', alter: 0, octave: 4, durationDivs: DIVISIONS, type: 'quarter', isRest: true });
-  }
-
-  const hasTreble = trebleNotes.length > 0;
-  const hasBass   = bassNotes.length > 0;
-
-  if (hasTreble && hasBass) {
+  if (trebleProcessed.length > 0 && bassProcessed.length > 0) {
     return grandStaffXml(
-      buildMeasures(trebleNotes, 'G', 2),
-      buildMeasures(bassNotes,   'F', 4)
+      buildMeasures(trebleProcessed, 'G', 2),
+      buildMeasures(bassProcessed,   'F', 4)
     );
-  } else if (hasBass) {
-    return singleStaffXml(buildMeasures(bassNotes, 'F', 4), 'F', 4);
+  } else if (bassProcessed.length > 0) {
+    return singleStaffXml(buildMeasures(bassProcessed, 'F', 4), 'F', 4);
   } else {
-    return singleStaffXml(buildMeasures(trebleNotes, 'G', 2), 'G', 2);
+    return singleStaffXml(buildMeasures(trebleProcessed, 'G', 2), 'G', 2);
   }
 }
