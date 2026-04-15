@@ -46,8 +46,9 @@ export default function LandingPage() {
             {['Home', 'Studio', 'Piano', 'Contact Us'].map((item) => {
               let href = '#';
               if (item === 'Home') href = '/';
-              else if (item === 'Studio') href = user ? '/studio' : '/login';
+              else if (item === 'Studio') href = user ? '/dashboard' : '/login';
               else if (item === 'Piano') href = user ? '/piano' : '/login';
+              else if (item === 'Contact Us') href = '/contact';
               
               return (
                 <Link
@@ -82,7 +83,7 @@ export default function LandingPage() {
           </p>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, flexWrap: 'wrap' }}>
             <Link href="/signup" className="btn-primary" style={{ fontSize: 16, padding: '14px 36px' }}>Start Creating Free</Link>
-            <Link href={user ? "/studio" : "/login"} className="btn-secondary" style={{ fontSize: 16, padding: '14px 36px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Link href={user ? "/dashboard" : "/login"} className="btn-secondary" style={{ fontSize: 16, padding: '14px 36px', display: 'flex', alignItems: 'center', gap: 8 }}>
               <span className="material-symbols-rounded" style={{ fontSize: 20 }}>play_circle</span>
               Open Studio
             </Link>
@@ -256,7 +257,7 @@ export default function LandingPage() {
                     <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                       {item === 'Privacy Policy' && 'We collect minimal data and never sell your information to third parties.'}
                       {item === 'Terms of Service' && 'By using Melodica you agree to our terms. Music you create remains yours.'}
-                      {item === 'Help Center' && 'Need help? Email us at support@melodica.ai or visit our docs.'}
+                      {item === 'Help Center' && 'Need help? Email us at melodica621@gmail.com or visit our docs.'}
                     </p>
                     <button onClick={() => setPopover(null)} style={{ marginTop: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 11 }}>Dismiss</button>
                   </div>
