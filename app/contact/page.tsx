@@ -19,6 +19,13 @@ export default function ContactPage() {
     setLoading(true);
     setError(null);
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setError('Please enter a valid email address (e.g., name@example.com)');
+      setLoading(false);
+      return;
+    }
+
     try {
       // If you haven't set up EmailJS yet, this will fail.
       // Once you have your keys, paste them at the top of this file.
