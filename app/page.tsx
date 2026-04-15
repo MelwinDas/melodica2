@@ -79,7 +79,7 @@ export default function LandingPage() {
             <span className="gradient-text">the Soul of Music</span>
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 18, maxWidth: 560, margin: '0 auto 40px', lineHeight: 1.7 }}>
-            Experience the future of music generation and editing with Melodica. Create, edit, and transcribe effortlessly with an intuitive AI copilot.
+            Experience the future of music generation and editing with Melodica. Create, edit, and transcribe effortlessly with an intuitive AI engine.
           </p>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, flexWrap: 'wrap' }}>
             <Link href="/signup" className="btn-primary" style={{ fontSize: 16, padding: '14px 36px' }}>Start Creating Free</Link>
