@@ -4,7 +4,7 @@ import OnboardingTour from "./components/OnboardingTour";
 
 export const metadata: Metadata = {
   title: "Melodica – AI That Understands the Soul of Music",
-  description: "Create, edit, and transcribe music effortlessly with an intuitive AI copilot. Melodica is the ultimate platform for musicians, producers, and creators.",
+  description: "Create, edit, and transcribe music effortlessly with an intuitive AI engine. Melodica is the ultimate platform for musicians, producers, and creators.",
   keywords: "AI music, DAW, music generation, sheet music, transcription, virtual piano",
 };
 
