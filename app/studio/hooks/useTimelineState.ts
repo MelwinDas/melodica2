@@ -18,8 +18,9 @@ export function useTimelineState(undoPush: (cmd: Command) => void) {
   }, []);
 
   const setBpm = useCallback((v: number) => {
-    bpmRef.current = v;
-    setBpmState(v);
+    const clampedBpm = Math.max(10, Math.min(500, Math.round(v)));
+    bpmRef.current = clampedBpm;
+    setBpmState(clampedBpm);
   }, []);
 
   // Load an entire timeline (e.g. from parsed MIDI)

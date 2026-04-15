@@ -72,9 +72,10 @@ export function usePianoEngine() {
   }, [timeSignature]);
 
   const setBpm = useCallback((v: number) => {
-    bpmRef.current = v;
-    setBpmState(v);
-    if (transportRef.current) transportRef.current.bpm.value = v;
+    const clampedBpm = Math.max(10, Math.min(500, Math.round(v)));
+    bpmRef.current = clampedBpm;
+    setBpmState(clampedBpm);
+    if (transportRef.current) transportRef.current.bpm.value = clampedBpm;
   }, []);
 
   const setTimeSignature = useCallback((ts: string) => {

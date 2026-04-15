@@ -149,13 +149,13 @@ export default function PianoHeader({
       }}>
         <span style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 700 }}>BPM</span>
         <input
-          type="number" value={bpm} min={40} max={300}
-          onChange={e => onBpmChange(Math.max(40, Math.min(300, Number(e.target.value))))}
+          type="number" value={bpm} min={10} max={500}
+          onChange={e => onBpmChange(Math.max(10, Math.min(500, Math.round(Number(e.target.value)))))}
           disabled={isRecording}
           style={{
             background: 'none', border: 'none', outline: 'none',
             color: isRecording ? 'var(--text-muted)' : 'var(--text-primary)',
-            fontSize: 14, fontWeight: 800, width: 38, textAlign: 'center',
+            fontSize: 14, fontWeight: 800, width: 40, textAlign: 'center',
             fontFamily: "'Space Grotesk', monospace",
           }}
         />

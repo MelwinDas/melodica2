@@ -75,11 +75,12 @@ export default function TransportBar({
           <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700 }}>BPM</span>
           <input
             type="number" value={bpm}
+            min="10" max="500" step="1"
             onChange={e => onBpmChange(Number(e.target.value))}
             style={{
               background: 'none', border: 'none', outline: 'none',
               color: 'var(--text-primary)', fontSize: 13, fontWeight: 700,
-              width: 36, textAlign: 'center',
+              width: 38, textAlign: 'center',
             }}
           />
         </div>
