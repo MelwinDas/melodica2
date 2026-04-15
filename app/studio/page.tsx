@@ -202,24 +202,6 @@ function StudioPageContent() {
     }
   }, [projectId, timeline.notes, timeline.bpm, timeline.timeSignature, supabase]);
 
-  // ── Load MIDI from URL (e.g. /studio?midi=/path/to.mid) ────────────────
-  const midiParam = searchParams.get('midi');
-
-  useEffect(() => {
-    if (midiParam) {
-      (async () => {
-        try {
-          const res = await fetch(midiParam);
-          if (!res.ok) throw new Error('Failed to fetch MIDI');
-          const buf = await res.arrayBuffer();
-          handleLoadMidi(buf, midiParam.split('/').pop() || 'sample.mid');
-        } catch (e) {
-          console.error('Error loading MIDI from URL:', e);
-        }
-      })();
-    }
-  }, [midiParam, handleLoadMidi]);
-
   // ── Keyboard shortcuts ─────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -247,6 +229,43 @@ function StudioPageContent() {
     return () => window.removeEventListener('keydown', handler);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audio.isPlaying, timeline.notes]);
+
+  // ── Project Metadata & MIDI Loading ────────────────────────────────────
+  const midiQueryParam = searchParams.get('midi');
+
+  useEffect(() => {
+    if (!projectId) return;
+
+    const loadProjectData = async () => {
+      try {
+        // 1. Fetch project record to get the ground-truth MIDI URL
+        const { data: project, error } = await supabase
+          .from('projects')
+          .select('*')
+          .eq('id', projectId)
+          .single();
+
+        if (error) throw error;
+
+        // 2. Decide which MIDI to load
+        // We prefer the DB URL if it exists, otherwise fallback to query param
+        const finalMidiUrl = project?.midi_url || midiQueryParam;
+
+        if (finalMidiUrl) {
+          const res = await fetch(finalMidiUrl);
+          if (!res.ok) throw new Error('Failed to fetch MIDI file');
+          
+          const buf = await res.arrayBuffer();
+          // Avoid reloading the same data if we are already in sync (basic check)
+          handleLoadMidi(buf, finalMidiUrl.split('/').pop() || 'project.mid');
+        }
+      } catch (err) {
+        console.error('Error loading project metadata or MIDI:', err);
+      }
+    };
+
+    loadProjectData();
+  }, [projectId, midiQueryParam, handleLoadMidi, supabase]);
 
   // ── Transport controls ─────────────────────────────────────────────────
   const handlePlayToggle = useCallback(async () => {

@@ -335,7 +335,7 @@ export default function OnboardingTour() {
         
         // Hard navigate so the studio cleanly mounts the Happy Birthday sample
         setTimeout(() => {
-          window.location.assign('/studio?id=55d72c9d-f2d3-410c-8deb-57588f275679&midi=%2FHappy_Sample.mid');
+          window.location.assign('/studio?id=55d72c9d-f2d3-410c-8deb-57588f275679');
         }, 250);
         return;
       }
@@ -434,7 +434,7 @@ export default function OnboardingTour() {
       // Definitively redirect to the demo project with a hard reload
       // We use a longer timeout (250ms) to ensure the metadata update has been fired off effectively
       setTimeout(() => {
-        window.location.assign('/studio?id=55d72c9d-f2d3-410c-8deb-57588f275679&midi=%2FHappy_Sample.mid');
+        window.location.assign('/studio?id=55d72c9d-f2d3-410c-8deb-57588f275679');
       }, 250);
       return;
     }
