@@ -7,7 +7,8 @@ export async function loginAction(formData: FormData) {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
 
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
+
   
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
