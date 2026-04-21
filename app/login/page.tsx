@@ -19,10 +19,17 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) { setError(error.message); return; }
-    router.push('/dashboard');
+    if (error) {
+      setLoading(false);
+      setError(error.message);
+      return;
+    }
+    // Refresh the server-side session (writes the cookie the middleware needs)
+    // then navigate. Use window.location for a hard redirect to avoid the
+    // middleware race condition where it sees no cookie and bounces back to /login.
+    window.location.href = '/dashboard';
   };
+
 
   return (
     <div className="hero-gradient min-h-screen flex flex-col items-center justify-center px-4" style={{ position: 'relative', overflow: 'hidden' }}>
