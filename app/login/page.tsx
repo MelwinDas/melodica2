@@ -24,10 +24,14 @@ export default function LoginPage() {
       setError(error.message);
       return;
     }
-    // Refresh the server-side session (writes the cookie the middleware needs)
-    // then navigate. Use window.location for a hard redirect to avoid the
-    // middleware race condition where it sees no cookie and bounces back to /login.
-    window.location.href = '/dashboard';
+    
+    // The safest way to handle Supabase SSR auth in Next.js App Router:
+    // 1. router.refresh() forces the Server Components to re-run and pick up the new session cookie.
+    // 2. router.push() performs a soft navigation to the dashboard.
+    router.refresh();
+    setTimeout(() => {
+      router.push('/dashboard');
+    }, 100);
   };
 
 
