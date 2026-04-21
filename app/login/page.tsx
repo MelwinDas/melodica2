@@ -4,9 +4,10 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '../../lib/supabase';
 
+import { loginAction } from './actions';
+
 export default function LoginPage() {
   const router = useRouter();
-  const supabase = createClient();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,20 +19,28 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      setLoading(false);
-      setError(error.message);
-      return;
-    }
     
-    // The safest way to handle Supabase SSR auth in Next.js App Router:
-    // 1. router.refresh() forces the Server Components to re-run and pick up the new session cookie.
-    // 2. router.push() performs a soft navigation to the dashboard.
-    router.refresh();
-    setTimeout(() => {
-      router.push('/dashboard');
-    }, 100);
+    try {
+      const formData = new FormData();
+      formData.append('email', email);
+      formData.append('password', password);
+      
+      const result = await loginAction(formData);
+      
+      if (!result.success) {
+        setLoading(false);
+        setError(result.error || 'Authentication failed');
+        return;
+      }
+      
+      // Cookie is now safely delivered via the Server Action's HTTP headers.
+      // Now a hard redirect instantly lands us in the dashboard with cookies correctly set.
+      window.location.href = '/dashboard';
+      
+    } catch (err: any) {
+      setLoading(false);
+      setError(err?.message || 'An unexpected error occurred');
+    }
   };
 
 
