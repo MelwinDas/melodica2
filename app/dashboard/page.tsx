@@ -226,11 +226,11 @@ function DashboardContent() {
   );
 
   return (
-    <div style={{ padding: '32px 36px', position: 'relative' }}>
+    <div style={{ padding: 'clamp(16px, 4vw, 32px) clamp(16px, 4vw, 36px)', position: 'relative', paddingBottom: 100 }}>
       {/* Top bar with user info */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32, flexWrap: 'wrap', gap: 16 }}>
         <div>
-          <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 28, fontWeight: 800, marginBottom: 4 }}>
+          <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 'clamp(22px, 4vw, 28px)', fontWeight: 800, marginBottom: 4 }}>
             {currentFolderName}
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
@@ -240,17 +240,17 @@ function DashboardContent() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => setShowNewModal(true)}
             className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 8, border: 'none', borderRadius: 10 }}>
-            <span className="material-symbols-rounded" style={{ fontSize: 18 }}>add</span>New Project
+            <span className="material-symbols-rounded" style={{ fontSize: 18 }}>add</span><span className="hide-mobile">New Project</span><span className="md:hidden">New</span>
           </button>
           <button onClick={handleSignOut}
             style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '9px 14px', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span className="material-symbols-rounded" style={{ fontSize: 16 }}>logout</span>Sign out
+            <span className="material-symbols-rounded" style={{ fontSize: 16 }}>logout</span><span className="hide-mobile">Sign out</span>
           </button>
         </div>
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 32 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(180px, 100%), 1fr))', gap: 'clamp(10px, 2vw, 16px)', marginBottom: 'clamp(20px, 3vw, 32px)' }}>
         {[
           { label: 'Projects', value: projects.length, icon: 'music_note', color: '#8b5cf6' },
           { label: 'Genres Used', value: new Set(projects.map(p => p.genre).filter(Boolean)).size, icon: 'category', color: '#14b8a6' },
@@ -279,7 +279,7 @@ function DashboardContent() {
         </div>
         <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span className="material-symbols-rounded" style={{ fontSize: 16, color: 'var(--text-muted)' }}>search</span>
-          <input style={{ background: 'none', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 13, width: 180 }}
+          <input style={{ background: 'none', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 13, width: 'clamp(100px, 30vw, 180px)' }}
             placeholder="Search projects…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
       </div>
@@ -302,7 +302,7 @@ function DashboardContent() {
 
       {/* Projects */}
       {view === 'grid' ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, marginBottom: 32 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))', gap: 'clamp(12px, 2vw, 16px)', marginBottom: 32 }}>
           {filtered.map(p => {
             const color = colorFor(p.genre);
             return (
@@ -393,7 +393,7 @@ function DashboardContent() {
       {showNewModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}
           onClick={e => { if (e.target === e.currentTarget) setShowNewModal(false); }}>
-          <div className="glass-card" style={{ width: '100%', maxWidth: 420, padding: '36px 32px' }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: 420, padding: 'clamp(24px, 4vw, 36px) clamp(20px, 4vw, 32px)', margin: '0 16px' }}>
             <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 800, marginBottom: 24 }}>New Project</h2>
             <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
@@ -478,7 +478,7 @@ function DashboardContent() {
       {showFolderModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}
           onClick={e => { if (e.target === e.currentTarget) setShowFolderModal(false); }}>
-          <div className="glass-card" style={{ width: '100%', maxWidth: 380, padding: '36px 32px' }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: 380, padding: 'clamp(24px, 4vw, 36px) clamp(20px, 4vw, 32px)', margin: '0 16px' }}>
             <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 20, fontWeight: 800, marginBottom: 24 }}>Create New Folder</h2>
             <form onSubmit={handleCreateFolder} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>

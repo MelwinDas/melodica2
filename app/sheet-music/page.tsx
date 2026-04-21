@@ -156,18 +156,20 @@ function SheetMusicContent() {
           borderBottom: '1px solid var(--border)',
           background: 'var(--bg-secondary)',
           backdropFilter: 'blur(12px)',
-          padding: '0 24px',
+          padding: '0 clamp(12px, 3vw, 24px)',
           display: 'flex',
           alignItems: 'center',
           height: 56,
-          gap: 24,
+          gap: 'clamp(10px, 3vw, 24px)',
           flexShrink: 0,
           zIndex: 100,
+          overflowX: 'auto',
+          overflowY: 'hidden',
         }}>
           {/* Melodica logo + name */}
-          <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+          <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', flexShrink: 0 }}>
             <span className="material-symbols-rounded" style={{ color: 'var(--accent-purple-light)', fontSize: 24 }}>piano</span>
-            <span style={{
+            <span className="hide-mobile" style={{
               fontFamily: "'Space Grotesk', sans-serif",
               fontWeight: 700, fontSize: 19, color: 'var(--text-primary)',
               letterSpacing: '-0.02em',
@@ -195,7 +197,7 @@ function SheetMusicContent() {
             }}
           >
             <span className="material-symbols-rounded" style={{ fontSize: 18 }}>arrow_back</span>
-            Piano Roll
+            <span className="hide-mobile">Piano Roll</span>
           </Link>
 
           <div style={{ flex: 1 }} />
@@ -230,19 +232,19 @@ function SheetMusicContent() {
             {isDownloading ? (
               <>
                 <span className="material-symbols-rounded" style={{ fontSize: 18, animation: 'spin 1s linear infinite' }}>progress_activity</span>
-                Processing...
+                <span className="hide-mobile">Processing...</span>
               </>
             ) : (
               <>
                 <span className="material-symbols-rounded" style={{ fontSize: 18 }}>download</span>
-                Download Sheet
+                <span className="hide-mobile">Download Sheet</span>
               </>
             )}
           </button>
         </nav>
 
         {/* ── Sheet music area ── */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '40px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: 'clamp(16px, 4vw, 40px) clamp(12px, 3vw, 32px)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           {/* Title */}
           <div style={{ textAlign: 'center', marginBottom: 22, width: '100%', maxWidth: 860 }}>
             <h2 style={{ fontFamily: 'serif', fontSize: 22, color: '#1a1830', marginBottom: 4 }}>
@@ -254,7 +256,7 @@ function SheetMusicContent() {
           </div>
 
           <div className="osmd-render-container" style={{ width: '100%', maxWidth: 860 }}>
-            <div style={{ background: 'white', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', padding: '24px' }}>
+            <div style={{ background: 'white', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', padding: 'clamp(12px, 3vw, 24px)', overflowX: 'auto' }}>
               {musicXml ? (
                 <OsmdViewer musicXml={musicXml} zoom={1.0} drawTitle={false} />
               ) : (

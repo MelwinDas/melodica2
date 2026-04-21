@@ -142,7 +142,8 @@ export default function PianoPage() {
       {/* ── MIDDLE BODY ────────────────────────────────────────────── */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-        {/* LEFT SIDEBAR */}
+        {/* LEFT SIDEBAR — hidden on mobile */}
+        <div className="hide-mobile">
         <QuickEditSidebar
           quantize={engine.quantize}
           countIn={engine.countIn}
@@ -156,9 +157,10 @@ export default function PianoPage() {
           onTrimSilence={engine.trimSilence}
           onClearAll={engine.clearAllTracks}
         />
+        </div>
 
         {/* MAIN STAGE */}
-        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '12px 16px', gap: 12, overflow: 'hidden' }}>
+        <main style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 'clamp(6px, 2vw, 12px) clamp(6px, 2vw, 16px)', gap: 'clamp(6px, 1.5vw, 12px)', overflow: 'hidden' }}>
 
           {/* Sheet Music — take all available flex-1 space and scroll internally */}
           <div data-tour="sheet-music-stage" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>

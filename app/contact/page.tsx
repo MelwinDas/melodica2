@@ -54,7 +54,7 @@ export default function ContactPage() {
   };
 
   return (
-    <div className="hero-gradient min-h-screen flex flex-col items-center justify-center px-4" style={{ position: 'relative', overflow: 'hidden', padding: '100px 0' }}>
+    <div className="hero-gradient min-h-screen flex flex-col items-center justify-center px-4" style={{ position: 'relative', overflow: 'hidden', padding: 'clamp(60px, 10vw, 100px) 0' }}>
       <div style={{ position: 'absolute', top: '5%', left: '5%', width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(139,92,246,0.08) 0%, transparent 70%)', pointerEvents: 'none' }} />
       <div style={{ position: 'absolute', bottom: '5%', right: '5%', width: 400, height: 400, borderRadius: '50%', background: 'radial-gradient(circle, rgba(20,184,166,0.06) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
@@ -67,10 +67,10 @@ export default function ContactPage() {
         {/* Contact Info */}
         <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
           <div className="badge badge-purple" style={{ marginBottom: 16, alignSelf: 'flex-start' }}>Get in Touch</div>
-          <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 48, fontWeight: 800, marginBottom: 24, lineHeight: 1.1 }}>
+          <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 'clamp(28px, 5vw, 48px)', fontWeight: 800, marginBottom: 24, lineHeight: 1.1 }}>
             How can we <span className="text-gradient-teal">help you?</span>
           </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 18, lineHeight: 1.6, marginBottom: 40, maxWidth: 460 }}>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 'clamp(14px, 2.5vw, 18px)', lineHeight: 1.6, marginBottom: 40, maxWidth: 460 }}>
             Have questions about Melodica? We're here to help you compose, create, and master your music.
           </p>
 
@@ -88,7 +88,7 @@ export default function ContactPage() {
         </div>
 
         {/* Contact Form */}
-        <div className="glass-card" style={{ padding: '48px' }}>
+        <div className="glass-card" style={{ padding: 'clamp(24px, 5vw, 48px)' }}>
           {success ? (
             <div style={{ textAlign: 'center', padding: '40px 0' }}>
               <span className="material-symbols-rounded" style={{ fontSize: 64, color: 'var(--accent-teal)', marginBottom: 20 }}>check_circle</span>
@@ -112,7 +112,7 @@ export default function ContactPage() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 8 }}>Name</label>
                   <input 

@@ -34,9 +34,9 @@ export default function LoginPage() {
         <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 26, color: 'var(--text-primary)' }}>Melodica</span>
       </Link>
 
-      <div className="glass-card" style={{ width: '100%', maxWidth: 440, padding: '40px 36px' }}>
+      <div className="glass-card" style={{ width: '100%', maxWidth: 440, padding: 'clamp(28px, 5vw, 40px) clamp(20px, 4vw, 36px)' }}>
         <div style={{ marginBottom: 32 }}>
-          <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 30, fontWeight: 800, marginBottom: 8 }}>Welcome Back</h1>
+          <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 'clamp(24px, 4vw, 30px)', fontWeight: 800, marginBottom: 8 }}>Welcome Back</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 15 }}>The rhythm is waiting. Sign in to your account.</p>
         </div>
 

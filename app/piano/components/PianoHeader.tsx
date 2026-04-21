@@ -38,12 +38,13 @@ export default function PianoHeader({
       background: 'var(--bg-secondary)',
       borderBottom: '1px solid var(--border)',
       display: 'flex', alignItems: 'center',
-      padding: '0 16px', gap: 8, zIndex: 100, flexShrink: 0,
+      padding: '0 12px', gap: 6, zIndex: 100, flexShrink: 0,
+      overflowX: 'auto', overflowY: 'hidden',
     }}>
       {/* Logo */}
-      <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, marginRight: 12, flexShrink: 0 }}>
+      <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, marginRight: 8, flexShrink: 0 }}>
         <span className="material-symbols-rounded" style={{ color: 'var(--accent-purple)', fontSize: 20 }}>piano</span>
-        <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 16 }}>Melodica</span>
+        <span className="hide-mobile" style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 16 }}>Melodica</span>
       </Link>
 
       <div style={{ flex: 1 }} />
@@ -230,7 +231,7 @@ export default function PianoHeader({
             width: 6, height: 6, borderRadius: '50%',
             background: backendAlive === null ? '#6b6890' : backendAlive ? '#10b981' : '#ef4444',
           }} />
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+          <span className="hide-mobile" style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
             {backendAlive ? 'Backend Connected' : 'Backend Offline'}
           </span>
         </div>
@@ -250,10 +251,10 @@ export default function PianoHeader({
         <button
           onClick={onOpenStudio}
           className="transport-btn"
-          style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', border: 'none', color: 'white', padding: '6px 14px', fontWeight: 700, fontSize: 12, gap: 5 }}
+          style={{ background: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', border: 'none', color: 'white', padding: '6px 14px', fontWeight: 700, fontSize: 12, gap: 5, flexShrink: 0 }}
         >
           <span className="material-symbols-rounded" style={{ fontSize: 16 }}>open_in_new</span>
-          Open in Studio
+          <span className="hide-mobile">Open in Studio</span>
         </button>
       </div>
     </header>

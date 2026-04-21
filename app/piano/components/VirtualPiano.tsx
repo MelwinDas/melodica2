@@ -72,7 +72,7 @@ export default function VirtualPiano({ pressedKeys, onNoteOn, onNoteOff }: Props
           <span className="material-symbols-rounded" style={{ fontSize: 14 }}>label</span>
           {showLabels ? 'Labels On' : 'Labels Off'}
         </button>
-        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+        <span className="hide-mobile" style={{ fontSize: 10, color: 'var(--text-muted)' }}>
           Click top → loud · Click bottom → soft · QWERTY: A–L
         </span>
       </div>
@@ -80,7 +80,9 @@ export default function VirtualPiano({ pressedKeys, onNoteOn, onNoteOff }: Props
       {/* Keyboard */}
       <div style={{ 
         display: 'flex', gap: 0, position: 'relative', userSelect: 'none', 
-        width: '100%', overflowX: 'auto', paddingBottom: 8, 
+        width: '100%', overflowX: 'auto', paddingBottom: 8,
+        touchAction: 'pan-x', /* allow horizontal scroll but block vertical */
+        WebkitOverflowScrolling: 'touch',
       }}>
         <div style={{ display: 'flex', minWidth: 'max-content', margin: '0 auto' }}>
         {OCTAVES.map(oct =>
@@ -112,6 +114,8 @@ export default function VirtualPiano({ pressedKeys, onNoteOn, onNoteOff }: Props
                     transition: 'background 0.06s, transform 0.06s',
                     transform: isPressed ? 'scaleY(0.97)' : 'scaleY(1)',
                     transformOrigin: 'top',
+                    touchAction: 'none',
+                    WebkitTapHighlightColor: 'transparent',
                   }}
                 >
                   {showLabels && `${note}${oct}`}
@@ -141,6 +145,8 @@ export default function VirtualPiano({ pressedKeys, onNoteOn, onNoteOff }: Props
                         display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
                         paddingBottom: 5,
                         transition: 'background 0.06s',
+                        touchAction: 'none',
+                        WebkitTapHighlightColor: 'transparent',
                       }}
                     >
                       {showLabels && (

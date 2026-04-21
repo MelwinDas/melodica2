@@ -39,7 +39,7 @@ export default function SignUpPage() {
 
   if (success) return (
     <div className="hero-gradient min-h-screen flex flex-col items-center justify-center px-4">
-      <div className="glass-card" style={{ width: '100%', maxWidth: 420, padding: '48px 40px', textAlign: 'center' }}>
+      <div className="glass-card" style={{ width: '100%', maxWidth: 420, padding: 'clamp(28px, 5vw, 48px) clamp(20px, 4vw, 40px)', textAlign: 'center' }}>
         <span className="material-symbols-rounded" style={{ fontSize: 56, color: 'var(--accent-teal)', display: 'block', marginBottom: 16 }}>mark_email_read</span>
         <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 24, fontWeight: 800, marginBottom: 12 }}>Check your inbox</h2>
         <p style={{ color: 'var(--text-secondary)', fontSize: 15, lineHeight: 1.7 }}>
@@ -62,10 +62,10 @@ export default function SignUpPage() {
         <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 26, color: 'var(--text-primary)' }}>Melodica</span>
       </Link>
 
-      <div className="glass-card" style={{ width: '100%', maxWidth: 460, padding: '40px 36px' }}>
+      <div className="glass-card" style={{ width: '100%', maxWidth: 460, padding: 'clamp(24px, 5vw, 40px) clamp(20px, 4vw, 36px)' }}>
         <div style={{ marginBottom: 32 }}>
           <div className="badge badge-teal" style={{ marginBottom: 12 }}>Free Forever Plan Available</div>
-          <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 30, fontWeight: 800, marginBottom: 8 }}>Create account</h1>
+          <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 'clamp(22px, 4vw, 30px)', fontWeight: 800, marginBottom: 8 }}>Create account</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 15 }}>Join the future of high-fidelity music creation.</p>
         </div>
 
@@ -76,7 +76,7 @@ export default function SignUpPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 8 }}>First name</label>
               <input id="signup-first-name" type="text" className="input-field" placeholder="Alex" value={firstName} onChange={e => setFirstName(e.target.value)} required />

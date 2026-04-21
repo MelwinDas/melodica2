@@ -43,7 +43,12 @@ function StudioPageContent() {
 
   // ── Split Panel Resizing ─────────────────────────────────────────────
   const [leftWidthPct, setLeftWidthPct] = useState(55);
+  // Start uncollapsed (SSR-safe). Collapse on mobile after hydration.
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (window.innerWidth < 768) setRightPanelCollapsed(true);
+  }, []);
   const isDraggingSplit = useRef(false);
 
   useEffect(() => {
@@ -422,7 +427,7 @@ function StudioPageContent() {
         isSaving={isSaving}
       />
 
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div className="studio-content-area" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Left: Piano Roll + Velocity Lane */}
         <div style={{
           width: rightPanelCollapsed ? `calc(100% - ${COLLAPSED_RIGHT_W}px)` : `${leftWidthPct}%`,
@@ -490,9 +495,10 @@ function StudioPageContent() {
           </div>
         </div>
 
-        {/* Split Divider */}
+        {/* Split Divider — hidden on mobile */}
         <div
           id="studio-split-divider"
+          className="hide-mobile"
           onMouseDown={() => {
             isDraggingSplit.current = true;
             document.body.style.cursor = 'col-resize';
@@ -578,7 +584,7 @@ function StudioPageContent() {
       {/* Create Project Modal */}
       {showCreateModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001 }}>
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, width: '100%', maxWidth: 400, padding: '32px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, width: '100%', maxWidth: 400, padding: 'clamp(20px, 4vw, 32px)', margin: '0 16px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}>
             <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 20, fontWeight: 800, marginBottom: 8, color: 'var(--text-primary)' }}>Save Your Work</h2>
             <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 24 }}>Give your new project a name to save it to your dashboard.</p>
             

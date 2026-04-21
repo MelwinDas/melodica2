@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import OnboardingTour from "./components/OnboardingTour";
+import MobileNav from "./components/MobileNav";
 
 export const metadata: Metadata = {
   title: "Melodica – AI That Understands the Soul of Music",
@@ -16,6 +17,7 @@ export default function RootLayout({
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
@@ -25,8 +27,10 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         {children}
+        <MobileNav />
         <OnboardingTour />
       </body>
     </html>
   );
 }
+
