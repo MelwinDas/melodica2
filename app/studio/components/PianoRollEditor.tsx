@@ -607,6 +607,40 @@ export default function PianoRollEditor({
   }, [isDragging, xToTime, snapGrid, secPerBeat, notes, selectedIds,
       onMoveNote, onResizeNote, onBulkMove, onSelectIds, timeToX, midiToY, drawOverlay]);
 
+  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+    const { x, y } = getCanvasCoords(e);
+    if (y < RULER_H) return;
+
+    const hit = hitTest(x, y);
+    if (hit) {
+      // Double click on existing note — no action (could open velocity editor)
+      return;
+    }
+
+    // Create new note
+    const midi = yToMidi(y);
+    if (midi < MIN_PITCH || midi > MAX_PITCH) return;
+    const rawTime = xToTime(x);
+    const time = snapTimeToGrid(Math.max(0, rawTime), snapGrid, secPerBeat);
+    const duration = snapDurationToGrid(secPerBeat / 4, snapGrid, secPerBeat); // 1/4 beat default
+    onAddNote({ midi, time, duration, velocity: DEFAULT_VELOCITY });
+    onPreviewNote(midi);
+  }, [getCanvasCoords, hitTest, yToMidi, xToTime, snapGrid, secPerBeat, onAddNote, onPreviewNote]);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const { x, y } = getCanvasCoords(e);
+    const hit = hitTest(x, y);
+    if (hit) {
+      if (selectedIds.has(hit.noteId) && selectedIds.size > 1) {
+        onDeleteNotes(selectedIds);
+        onSelectIds(new Set());
+      } else {
+        onDeleteNote(hit.noteId);
+      }
+    }
+  }, [getCanvasCoords, hitTest, selectedIds, onDeleteNote, onDeleteNotes, onSelectIds]);
+
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (e.touches.length !== 1) return;
     const touch = e.touches[0];
@@ -662,40 +696,6 @@ export default function PianoRollEditor({
     }
     handleMouseUp();
   }, [handleMouseUp]);
-
-  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
-    const { x, y } = getCanvasCoords(e);
-    if (y < RULER_H) return;
-
-    const hit = hitTest(x, y);
-    if (hit) {
-      // Double click on existing note — no action (could open velocity editor)
-      return;
-    }
-
-    // Create new note
-    const midi = yToMidi(y);
-    if (midi < MIN_PITCH || midi > MAX_PITCH) return;
-    const rawTime = xToTime(x);
-    const time = snapTimeToGrid(Math.max(0, rawTime), snapGrid, secPerBeat);
-    const duration = snapDurationToGrid(secPerBeat / 4, snapGrid, secPerBeat); // 1/4 beat default
-    onAddNote({ midi, time, duration, velocity: DEFAULT_VELOCITY });
-    onPreviewNote(midi);
-  }, [getCanvasCoords, hitTest, yToMidi, xToTime, snapGrid, secPerBeat, onAddNote, onPreviewNote]);
-
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    const { x, y } = getCanvasCoords(e);
-    const hit = hitTest(x, y);
-    if (hit) {
-      if (selectedIds.has(hit.noteId) && selectedIds.size > 1) {
-        onDeleteNotes(selectedIds);
-        onSelectIds(new Set());
-      } else {
-        onDeleteNote(hit.noteId);
-      }
-    }
-  }, [getCanvasCoords, hitTest, selectedIds, onDeleteNote, onDeleteNotes, onSelectIds]);
 
   // Keyboard: Delete/Backspace
   useEffect(() => {
