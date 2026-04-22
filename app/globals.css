@@ -674,9 +674,11 @@ code {
   z-index: 299;
   opacity: 0;
   transition: opacity 0.3s ease;
+  pointer-events: none;
 }
 .mobile-drawer-overlay.open {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .mobile-drawer {

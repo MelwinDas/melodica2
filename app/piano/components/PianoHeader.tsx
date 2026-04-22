@@ -22,13 +22,14 @@ interface Props {
   onTimeSignatureChange: (ts: string) => void;
   onMetronomeToggle: () => void;
   onOpenStudio: () => void;
+  onToggleSidebar?: () => void;
 }
 
 export default function PianoHeader({
   isPlaying, isRecording, recordingPaused, position, bpm, timeSignature,
   metronomeEnabled, metronomeFlash, backendAlive, trackCount,
   onRecord, onPauseRecord, onResumeRecord, onStopRecord,
-  onPlayAll, onStop, onBpmChange, onTimeSignatureChange, onMetronomeToggle, onOpenStudio,
+  onPlayAll, onStop, onBpmChange, onTimeSignatureChange, onMetronomeToggle, onOpenStudio, onToggleSidebar
 }: Props) {
   const pad = (n: number, d = 2) => String(n).padStart(d, '0');
 
@@ -41,11 +42,18 @@ export default function PianoHeader({
       padding: '0 12px', gap: 6, zIndex: 100, flexShrink: 0,
       overflowX: 'auto', overflowY: 'hidden',
     }}>
-      {/* Logo */}
-      <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, marginRight: 8, flexShrink: 0 }}>
-        <span className="material-symbols-rounded" style={{ color: 'var(--accent-purple)', fontSize: 20 }}>piano</span>
-        <span className="hide-mobile" style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 16 }}>Melodica</span>
-      </Link>
+      {/* Logo / Menu */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: 8, flexShrink: 0 }}>
+        {onToggleSidebar && (
+          <button className="show-mobile hamburger-btn" onClick={onToggleSidebar} style={{ padding: 4, marginRight: 4 }}>
+            <span className="material-symbols-rounded" style={{ fontSize: 24 }}>menu</span>
+          </button>
+        )}
+        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span className="material-symbols-rounded" style={{ color: 'var(--accent-purple)', fontSize: 20 }}>piano</span>
+          <span className="hide-mobile" style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 16 }}>Melodica</span>
+        </Link>
+      </div>
 
       <div style={{ flex: 1 }} />
 

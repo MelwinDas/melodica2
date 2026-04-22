@@ -429,7 +429,7 @@ function StudioPageContent() {
 
       <div className="studio-content-area" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Left: Piano Roll + Velocity Lane */}
-        <div style={{
+        <div className="studio-left-panel" style={{
           width: rightPanelCollapsed ? `calc(100% - ${COLLAPSED_RIGHT_W}px)` : `${leftWidthPct}%`,
           display: 'flex', flexDirection: 'column',
           transition: isDraggingSplit.current ? 'none' : 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -495,10 +495,10 @@ function StudioPageContent() {
           </div>
         </div>
 
-        {/* Split Divider — hidden on mobile */}
+        {/* Split Divider */}
         <div
           id="studio-split-divider"
-          className="hide-mobile"
+          className="studio-split-divider"
           onMouseDown={() => {
             isDraggingSplit.current = true;
             document.body.style.cursor = 'col-resize';
@@ -553,7 +553,7 @@ function StudioPageContent() {
         </div>
 
         {/* Right panel */}
-        <div style={{
+        <div className={`studio-right-panel ${!rightPanelCollapsed ? 'open' : ''}`} style={{
           width: rightPanelCollapsed ? COLLAPSED_RIGHT_W : `calc(${100 - leftWidthPct}%)`,
           overflow: 'hidden',
           transition: isDraggingSplit.current ? 'none' : 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -635,6 +635,54 @@ function StudioPageContent() {
       <style>{`
         @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
         @keyframes spin { to{transform:rotate(360deg)} }
+
+        /* Mobile overrides for studio layout */
+        @media (max-width: 768px) {
+          .studio-left-panel {
+            width: 100% !important;
+          }
+          .studio-right-panel {
+            position: fixed !important;
+            top: 56px !important;
+            bottom: 64px !important;
+            right: 0 !important;
+            width: 300px !important;
+            max-width: 85vw !important;
+            z-index: 250 !important;
+            transform: translateX(100%);
+            transition: transform 0.3s ease !important;
+            box-shadow: -5px 0 25px rgba(0,0,0,0.5) !important;
+            border-left: 1px solid var(--border) !important;
+          }
+          .studio-right-panel.open {
+            transform: translateX(0);
+          }
+          .studio-split-divider {
+            position: fixed !important;
+            bottom: 80px !important;
+            right: 16px !important;
+            width: 48px !important;
+            height: 48px !important;
+            border-radius: 50% !important;
+            background: var(--accent-purple) !important;
+            z-index: 260 !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+            cursor: pointer !important;
+          }
+          .studio-split-divider > div { display: none !important; }
+          .studio-split-divider button {
+            position: relative !important;
+            top: 0 !important; left: 0 !important;
+            width: 100% !important; height: 100% !important;
+            background: transparent !important;
+            border: none !important;
+            color: white !important;
+            box-shadow: none !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+          }
+        }
       `}</style>
     </div>
   );

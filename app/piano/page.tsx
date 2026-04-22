@@ -12,6 +12,7 @@ export default function PianoPage() {
   const engine = usePianoEngine();
   const [backendAlive, setBackendAlive] = useState<boolean | null>(null);
   const [pressedKeys,  setPressedKeys]  = useState<Set<string>>(new Set());
+  const [showSidebar,  setShowSidebar]  = useState(false);
 
   // Backend health check
   useEffect(() => {
@@ -137,13 +138,20 @@ export default function PianoPage() {
         onTimeSignatureChange={engine.setTimeSignature}
         onMetronomeToggle={engine.toggleMetronome}
         onOpenStudio={handleOpenStudio}
+        onToggleSidebar={() => setShowSidebar(s => !s)}
       />
 
       {/* ── MIDDLE BODY ────────────────────────────────────────────── */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
+        
+        {/* Mobile Sidebar Overlay */}
+        <div 
+          className={`mobile-drawer-overlay ${showSidebar ? 'open' : ''}`} 
+          onClick={() => setShowSidebar(false)} 
+        />
 
-        {/* LEFT SIDEBAR — hidden on mobile */}
-        <div className="hide-mobile">
+        {/* LEFT SIDEBAR */}
+        <div className={`piano-sidebar ${showSidebar ? 'open' : ''}`}>
         <QuickEditSidebar
           quantize={engine.quantize}
           countIn={engine.countIn}
@@ -187,6 +195,30 @@ export default function PianoPage() {
           </div>
         </main>
       </div>
+
+      <style>{`
+        /* Mobile overrides for piano sidebar */
+        .piano-sidebar {
+          display: block;
+        }
+        @media (max-width: 768px) {
+          .piano-sidebar {
+            position: fixed;
+            top: 56px; /* below header */
+            bottom: 0;
+            left: 0;
+            z-index: 300;
+            transform: translateX(-100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            box-shadow: 5px 0 25px rgba(0,0,0,0.5);
+          }
+          .piano-sidebar.open {
+            transform: translateX(0);
+          }
+        }
+      `}</style>
     </div>
   );
 }

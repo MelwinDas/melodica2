@@ -27,7 +27,7 @@ export default function OsmdViewer({ musicXml, zoom = 1.0, drawTitle = false }: 
       if (!osmdRef.current) {
         osmdRef.current = new OpenSheetMusicDisplay(el, {
           autoResize: true,
-          backend: 'canvas',
+          backend: 'svg',
           drawTitle,
           drawSubtitle: false,
           drawComposer: false,

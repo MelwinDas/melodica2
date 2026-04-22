@@ -114,7 +114,7 @@ export default function VirtualPiano({ pressedKeys, onNoteOn, onNoteOff }: Props
                     transition: 'background 0.06s, transform 0.06s',
                     transform: isPressed ? 'scaleY(0.97)' : 'scaleY(1)',
                     transformOrigin: 'top',
-                    touchAction: 'none',
+                    touchAction: 'pan-x',
                     WebkitTapHighlightColor: 'transparent',
                   }}
                 >
@@ -145,7 +145,7 @@ export default function VirtualPiano({ pressedKeys, onNoteOn, onNoteOff }: Props
                         display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
                         paddingBottom: 5,
                         transition: 'background 0.06s',
-                        touchAction: 'none',
+                        touchAction: 'pan-x',
                         WebkitTapHighlightColor: 'transparent',
                       }}
                     >

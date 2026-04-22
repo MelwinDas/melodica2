@@ -64,6 +64,9 @@ export default function PianoRollEditor({
 
   const dragRef = useRef<DragState>({ mode: 'none', startX: 0, startY: 0, currentX: 0, currentY: 0 });
   const [isDragging, setIsDragging] = useState(false);
+  
+  const lastTapTime = useRef<number>(0);
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
   const secPerBeat = 60 / bpm;
 
@@ -604,6 +607,62 @@ export default function PianoRollEditor({
   }, [isDragging, xToTime, snapGrid, secPerBeat, notes, selectedIds,
       onMoveNote, onResizeNote, onBulkMove, onSelectIds, timeToX, midiToY, drawOverlay]);
 
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+
+    const now = Date.now();
+    if (now - lastTapTime.current < 300) {
+      e.preventDefault();
+      const mockEvent = { clientX: touch.clientX, clientY: touch.clientY } as React.MouseEvent;
+      handleDoubleClick(mockEvent);
+      lastTapTime.current = 0;
+      return;
+    }
+    lastTapTime.current = now;
+
+    const mockEvent = { clientX: touch.clientX, clientY: touch.clientY, button: 0, shiftKey: false, preventDefault: () => {} } as unknown as React.MouseEvent;
+    handleMouseDown(mockEvent);
+
+    if (dragRef.current.mode === 'move') {
+      longPressTimer.current = setTimeout(() => {
+        if (dragRef.current.noteId) {
+          const note = notes.find(n => n.id === dragRef.current.noteId);
+          if (note) {
+            const rect = gridCanvasRef.current?.getBoundingClientRect();
+            if (!rect) return;
+            const x = touch.clientX - rect.left;
+            const nx = timeToX(note.time);
+            const nw = Math.max(timeToX(note.time + note.duration) - nx, 3);
+            if (x > nx + nw / 2) {
+              dragRef.current.mode = 'resize';
+              if (gridScrollRef.current) gridScrollRef.current.style.cursor = 'ew-resize';
+            }
+          }
+        }
+      }, 500);
+    }
+  }, [notes, timeToX, handleMouseDown, handleDoubleClick]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length !== 1 || !isDragging) return;
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    const touch = e.touches[0];
+    const mockEvent = { clientX: touch.clientX, clientY: touch.clientY, preventDefault: () => {} } as unknown as React.MouseEvent;
+    handleMouseMove(mockEvent);
+  }, [isDragging, handleMouseMove]);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    handleMouseUp();
+  }, [handleMouseUp]);
+
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     const { x, y } = getCanvasCoords(e);
     if (y < RULER_H) return;
@@ -670,13 +729,17 @@ export default function PianoRollEditor({
       <div
         ref={gridScrollRef}
         onScroll={onGridScroll}
-        style={{ flex: 1, overflow: 'auto' }}
+        style={{ flex: 1, overflow: 'auto', touchAction: 'none' }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onDoubleClick={handleDoubleClick}
         onContextMenu={handleContextMenu}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
       >
         <div style={{ position: 'relative', width: gridW, height: canvasH, display: 'inline-block' }}>
           <canvas ref={gridCanvasRef} style={{ display: 'block', width: gridW, height: canvasH }} />

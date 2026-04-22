@@ -149,6 +149,36 @@ export default function VelocityLane({ notes, bpm, selectedIds, onSetVelocity, s
     draggingRef.current = null;
   }, []);
 
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect || e.touches.length === 0) return;
+    const x = e.touches[0].clientX - rect.left;
+    const y = e.touches[0].clientY - rect.top;
+
+    for (let i = notes.length - 1; i >= 0; i--) {
+      const note = notes[i];
+      if (selectedIds.size > 0 && !selectedIds.has(note.id)) continue;
+
+      const nx = timeToX(note.time);
+      const nw = Math.max(timeToX(note.time + note.duration) - nx - 2, BAR_MIN_W);
+      if (x >= nx && x <= nx + nw) {
+        const vel = Math.max(1, Math.min(127, Math.round(((LANE_H - y) / LANE_H) * 127)));
+        draggingRef.current = note.id;
+        onSetVelocity(note.id, vel);
+        return;
+      }
+    }
+  }, [notes, timeToX, onSetVelocity, selectedIds]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!draggingRef.current || e.touches.length === 0) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const y = e.touches[0].clientY - rect.top;
+    const vel = Math.max(1, Math.min(127, Math.round(((LANE_H - y) / LANE_H) * 127)));
+    onSetVelocity(draggingRef.current, vel);
+  }, [onSetVelocity]);
+
   return (
     <div
       ref={container}
@@ -156,11 +186,16 @@ export default function VelocityLane({ notes, bpm, selectedIds, onSetVelocity, s
         height: LANE_H,
         overflowX: 'hidden', overflowY: 'hidden', /* we disable native scrollbar here since it's synced with the grid */
         background: '#14121f', flex: 1,
+        touchAction: 'none',
       }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleMouseUp}
+      onTouchCancel={handleMouseUp}
     >
       <canvas ref={canvasRef} style={{ display: 'block', width: canvasW, height: LANE_H }} />
     </div>
