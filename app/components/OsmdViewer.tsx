@@ -23,21 +23,23 @@ export default function OsmdViewer({ musicXml, zoom = 1.0, drawTitle = false }: 
 
       if (cancelled) return;
 
-      // Re-use existing OSMD instance if possible
-      if (!osmdRef.current) {
-        osmdRef.current = new OpenSheetMusicDisplay(el, {
-          autoResize: true,
-          backend: 'svg',
-          drawTitle,
-          drawSubtitle: false,
-          drawComposer: false,
-          drawCredits: false,
-          drawLyricist: false,
-          drawMeasureNumbers: true,
-          drawTimeSignatures: true,
-          followCursor: false,
-        });
+      // Ensure we create a new OSMD instance for the current DOM element
+      if (osmdRef.current) {
+        osmdRef.current.clear();
       }
+      
+      osmdRef.current = new OpenSheetMusicDisplay(el, {
+        autoResize: true,
+        backend: 'svg',
+        drawTitle,
+        drawSubtitle: false,
+        drawComposer: false,
+        drawCredits: false,
+        drawLyricist: false,
+        drawMeasureNumbers: true,
+        drawTimeSignatures: true,
+        followCursor: false,
+      });
 
       const osmd = osmdRef.current;
       osmd.zoom = zoom;
@@ -50,7 +52,13 @@ export default function OsmdViewer({ musicXml, zoom = 1.0, drawTitle = false }: 
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (osmdRef.current) {
+        osmdRef.current.clear();
+        osmdRef.current = null;
+      }
+    };
   }, [musicXml, zoom, drawTitle]);
 
   return (

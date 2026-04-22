@@ -815,9 +815,12 @@ code {
     min-height: 48px;
   }
 
-  /* Sidebar — hidden on mobile (use drawer instead) */
+  /* Sidebar — fill container on mobile */
   .sidebar-glass {
-    display: none;
+    width: 100%;
+    height: 100%;
+    border-right: none;
+    background: transparent;
   }
 
   /* Transport / LCD — scale down */

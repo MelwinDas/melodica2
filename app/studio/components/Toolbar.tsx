@@ -84,7 +84,6 @@ export default function Toolbar({ tool, onToolChange, canUndo, canRedo, onUndo, 
 
       <div style={{ flex: 1 }} />
 
-      {/* View Sheet Music */}
       <button
         data-tour="view-sheet-music-btn"
         onClick={onViewSheetMusic}
@@ -95,7 +94,7 @@ export default function Toolbar({ tool, onToolChange, canUndo, canRedo, onUndo, 
         }}
       >
         <span className="material-symbols-rounded" style={{ fontSize: 14 }}>library_music</span>
-        Full Sheet Music
+        <span className="hide-mobile">Full Sheet Music</span>
       </button>
     </div>
   );

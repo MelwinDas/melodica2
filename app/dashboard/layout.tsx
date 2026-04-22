@@ -179,6 +179,17 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-primary)' }}>
 
+      {/* ── Desktop Sidebar ───────────────────────────────────────── */}
+      <aside className="hide-mobile" style={{
+        width: 240, flexShrink: 0, background: 'var(--bg-secondary)',
+        borderRight: '1px solid var(--border)',
+        display: 'flex', flexDirection: 'column', padding: '24px 16px',
+        position: 'sticky', top: 0, height: '100vh', overflowY: 'auto'
+      }}>
+        <SidebarContent />
+      </aside>
+
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
       {/* ── Mobile Top Bar ─────────────────────────────────────────── */}
       <div className="mobile-top-bar">
         <button className="hamburger-btn" onClick={() => setMobileDrawerOpen(true)} aria-label="Open sidebar">
@@ -215,15 +226,7 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
         <SidebarContent />
       </aside>
 
-      {/* ── Desktop Sidebar ───────────────────────────────────────── */}
-      <aside className="hide-mobile" style={{
-        width: 240, flexShrink: 0, background: 'var(--bg-secondary)',
-        borderRight: '1px solid var(--border)',
-        display: 'flex', flexDirection: 'column', padding: '24px 16px',
-        position: 'sticky', top: 0, height: '100vh', overflowY: 'auto'
-      }}>
-        <SidebarContent />
-      </aside>
+      {/* Desktop sidebar moved up */}
 
       {/* Folder Creation Modal */}
       {showFolderModal && (
@@ -248,6 +251,7 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
       <main style={{ flex: 1, overflowY: 'auto' }}>
         {children}
       </main>
+      </div>
     </div>
   );
 }

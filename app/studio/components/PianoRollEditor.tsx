@@ -65,6 +65,22 @@ export default function PianoRollEditor({
   const dragRef = useRef<DragState>({ mode: 'none', startX: 0, startY: 0, currentX: 0, currentY: 0 });
   const [isDragging, setIsDragging] = useState(false);
   
+  // Touch drag native scroll prevention
+  useEffect(() => {
+    const el = gridScrollRef.current;
+    if (!el) return;
+    const preventScroll = (e: TouchEvent) => {
+      // Prevent native scrolling if we are drawing marquee, moving/resizing a note, or scrubbing
+      if (dragRef.current.mode !== 'none' || isDragging) {
+        if (e.touches.length === 1) {
+          e.preventDefault();
+        }
+      }
+    };
+    el.addEventListener('touchmove', preventScroll, { passive: false });
+    return () => el.removeEventListener('touchmove', preventScroll);
+  }, [isDragging]);
+
   const lastTapTime = useRef<number>(0);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
@@ -613,7 +629,8 @@ export default function PianoRollEditor({
 
     const hit = hitTest(x, y);
     if (hit) {
-      // Double click on existing note — no action (could open velocity editor)
+      // Delete note on double click
+      onDeleteNote(hit.noteId);
       return;
     }
 
@@ -729,7 +746,7 @@ export default function PianoRollEditor({
       <div
         ref={gridScrollRef}
         onScroll={onGridScroll}
-        style={{ flex: 1, overflow: 'auto', touchAction: 'none' }}
+        style={{ flex: 1, overflow: 'auto' }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
