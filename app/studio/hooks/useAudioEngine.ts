@@ -10,12 +10,17 @@ export function useAudioEngine() {
   const partRef = useRef<import('tone').Part | null>(null);
   const synthRef = useRef<import('tone').PolySynth | null>(null);
   const rafRef = useRef(0);
+  // [FIX #3] Keep a reference to the loaded Tone module so cleanup can be synchronous
+  const toneModuleRef = useRef<typeof import('tone') | null>(null);
+  // [FIX #12] Shared synth instance for note previews
+  const previewSynthRef = useRef<import('tone').Synth | null>(null);
 
   const cleanup = useCallback(async () => {
     cancelAnimationFrame(rafRef.current);
     rafRef.current = 0;
     try {
-      const Tone = await import('tone');
+      const Tone = toneModuleRef.current ?? await import('tone');
+      toneModuleRef.current = Tone;
       Tone.getTransport().stop();
       Tone.getTransport().cancel();
       if (partRef.current) { partRef.current.dispose(); partRef.current = null; }
@@ -24,21 +29,24 @@ export function useAudioEngine() {
     transportRef.current = null;
   }, []);
 
-  // Stop all audio when the component unmounts (e.g. navigating away)
+  // [FIX #3] Stop all audio when the component unmounts (e.g. navigating away).
+  // Use the pre-loaded toneModuleRef so cleanup is SYNCHRONOUS — no dangling promises.
   useEffect(() => {
     return () => {
       // Synchronously cancel any pending animation frame
       cancelAnimationFrame(rafRef.current);
       rafRef.current = 0;
-      // Dispose Tone.js resources
+      // Dispose Tone.js resources synchronously using the cached module
       try {
-        // Use dynamic import inline for cleanup
-        import('tone').then((Tone) => {
+        const Tone = toneModuleRef.current;
+        if (Tone) {
           Tone.getTransport().stop();
           Tone.getTransport().cancel();
-          if (partRef.current) { partRef.current.dispose(); partRef.current = null; }
-          if (synthRef.current) { synthRef.current.dispose(); synthRef.current = null; }
-        }).catch(() => { /* ignore */ });
+        }
+        if (partRef.current) { partRef.current.dispose(); partRef.current = null; }
+        if (synthRef.current) { synthRef.current.dispose(); synthRef.current = null; }
+        // [FIX #12] Dispose shared preview synth
+        if (previewSynthRef.current) { previewSynthRef.current.dispose(); previewSynthRef.current = null; }
       } catch { /* ignore */ }
       transportRef.current = null;
     };
@@ -55,6 +63,8 @@ export function useAudioEngine() {
     await cleanup();
 
     const Tone = await import('tone');
+    // [FIX #3] Cache the Tone module for synchronous cleanup later
+    toneModuleRef.current = Tone;
     await Tone.start();
 
     const transport = Tone.getTransport();
@@ -79,7 +89,8 @@ export function useAudioEngine() {
     }, events);
     partRef.current = part;
 
-    const endTime = Math.max(...notes.map(n => n.time + n.duration));
+    // [FIX #10] Use reduce instead of spread to prevent stack overflow on large arrays
+    const endTime = notes.reduce((max, n) => Math.max(max, n.time + n.duration), 0);
     transport.scheduleOnce(() => {
       setIsPlaying(false);
       cancelAnimationFrame(rafRef.current);
@@ -150,19 +161,22 @@ export function useAudioEngine() {
     } catch { /* ignore */ }
   }, []);
 
-  // Preview a single note (for pencil tool feedback)
+  // [FIX #12] Preview a single note using a shared, reusable Synth instance.
   const previewNote = useCallback(async (midi: number, duration = 0.2) => {
     try {
-      const Tone = await import('tone');
+      const Tone = toneModuleRef.current ?? await import('tone');
+      toneModuleRef.current = Tone;
       await Tone.start();
-      const synth = new Tone.Synth({
-        oscillator: { type: 'triangle' },
-        envelope: { attack: 0.01, decay: 0.1, sustain: 0.3, release: 0.3 },
-      }).toDestination();
-      synth.set({ volume: -10 });
+      // Create the shared preview synth lazily once
+      if (!previewSynthRef.current || previewSynthRef.current.disposed) {
+        previewSynthRef.current = new Tone.Synth({
+          oscillator: { type: 'triangle' },
+          envelope: { attack: 0.01, decay: 0.1, sustain: 0.3, release: 0.3 },
+        }).toDestination();
+        previewSynthRef.current.set({ volume: -10 });
+      }
       const noteName = Tone.Frequency(midi, 'midi').toNote();
-      synth.triggerAttackRelease(noteName, duration);
-      setTimeout(() => synth.dispose(), (duration + 0.5) * 1000);
+      previewSynthRef.current.triggerAttackRelease(noteName, duration);
     } catch { /* ignore */ }
   }, []);
 
@@ -171,7 +185,8 @@ export function useAudioEngine() {
     if (notes.length === 0) throw new Error('No notes to render');
 
     const Tone = await import('tone');
-    const endTime = Math.max(...notes.map(n => n.time + n.duration)) + 1; // +1s tail
+    // [FIX #10] Use reduce instead of spread to prevent stack overflow on large arrays
+    const endTime = notes.reduce((max, n) => Math.max(max, n.time + n.duration), 0) + 1; // +1s tail
 
     // Offline rendering
     const buffer = await Tone.Offline(({ transport }) => {
@@ -251,7 +266,8 @@ function bufferToWavBlob(buffer: AudioBuffer): Blob {
 
   for (i = 0; i < buffer.numberOfChannels; i++) channels.push(buffer.getChannelData(i));
 
-  while (pos < length) {
+  // [FIX #9] Guard against buffer overrun — stop when we've consumed all samples.
+  while (pos < length && offset < buffer.length) {
     for (i = 0; i < numOfChan; i++) {
       sample = Math.max(-1, Math.min(1, channels[i][offset]));
       sample = (sample < 0 ? sample * 0x8000 : sample * 0x7FFF) | 0;

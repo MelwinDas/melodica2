@@ -197,7 +197,8 @@ function DashboardContent() {
         const CHUNK = 8192;
         let b64 = '';
         for (let i = 0; i < bytes.length; i += CHUNK) {
-          b64 += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+          // [FIX #6] Avoid spread operator (...) which can cause stack overflow on large buffers
+          b64 += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + CHUNK)));
         }
         localStorage.setItem('melodica_midi_base64', btoa(b64));
         localStorage.setItem('melodica_midi_name', uploadFile.name);

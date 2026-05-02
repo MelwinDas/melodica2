@@ -87,8 +87,9 @@ export default function PianoRollEditor({
   const secPerBeat = 60 / bpm;
 
   // Calculate canvas dimensions
+  // [FIX #10] Use reduce instead of spread to prevent stack overflow on large arrays
   const endTime = notes.length > 0
-    ? Math.max(...notes.map(n => n.time + n.duration))
+    ? notes.reduce((max, n) => Math.max(max, n.time + n.duration), 0)
     : 0;
   const totalBeats = Math.max(Math.ceil(endTime / secPerBeat) + 16, 32);
   const canvasH = RULER_H + PITCH_RANGE * ROW_H;
@@ -484,6 +485,12 @@ export default function PianoRollEditor({
 
     if (tool === 'eraser' && hit) {
       onDeleteNote(hit.noteId);
+      // [FIX #13] Remove the deleted note from selection to prevent stale references
+      if (selectedIds.has(hit.noteId)) {
+        const next = new Set(selectedIds);
+        next.delete(hit.noteId);
+        onSelectIds(next);
+      }
       return;
     }
 

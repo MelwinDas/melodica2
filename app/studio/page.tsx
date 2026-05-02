@@ -17,6 +17,10 @@ import PianoRollEditor from './components/PianoRollEditor';
 import RightPanel from './components/RightPanel';
 import { createClient } from '../../lib/supabase';
 
+// [FIX #2] Create the Supabase client at module-level to avoid
+// re-creating it on every render (which breaks useEffect/useCallback deps).
+const supabase = createClient();
+
 function StudioPageContent() {
   const pathname = usePathname();
   // ── Core hooks ─────────────────────────────────────────────────────────
@@ -36,7 +40,7 @@ function StudioPageContent() {
   const [newProjectName, setNewProjectName] = useState('My Piano Recording');
   const [creationError, setCreationError] = useState('');
 
-  const supabase = createClient();
+  // supabase is now module-level (see top of file)
   const searchParams = useSearchParams();
   const router = useRouter();
   const projectId = searchParams.get('id');
@@ -237,10 +241,10 @@ function StudioPageContent() {
       console.error('CRITICAL SAVE FAILURE:', e);
       alert(`Save Error: ${e.message || 'Unknown error occurred.'}`);
     } finally {
-      setIsSaving(true);
-      setTimeout(() => setIsSaving(false), 500);
+      // [FIX #1] Was incorrectly set to `true`, causing a brief re-lock.
+      setIsSaving(false);
     }
-  }, [projectId, timeline.notes, timeline.bpm, timeline.timeSignature, supabase]);
+  }, [projectId, timeline.notes, timeline.bpm, timeline.timeSignature]);
 
   const handleConfirmCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -302,6 +306,38 @@ function StudioPageContent() {
       setIsSaving(false);
     }
   };
+  // ── Transport controls ─────────────────────────────────────────────────
+  const handlePlayToggle = useCallback(async () => {
+    if (audio.isPlaying) {
+      await audio.pause();
+    } else {
+      await audio.play(
+        timeline.notes,
+        timeline.bpm,
+        (seconds) => setPlayheadSeconds(seconds),
+        () => setPlayheadSeconds(0),
+        playheadSeconds
+      );
+    }
+  }, [audio, timeline.notes, timeline.bpm, playheadSeconds]);
+
+  const handleStop = useCallback(async () => {
+    await audio.stop();
+    setPlayheadSeconds(0);
+  }, [audio]);
+
+  const handleSeek = useCallback((seconds: number) => {
+    setPlayheadSeconds(seconds);
+    audio.seek(seconds);
+  }, [audio]);
+
+  const handleRecord = useCallback(() => {
+    setIsRecording(r => !r);
+  }, []);
+  // [FIX #4] Use a ref for handlePlayToggle so the keyboard handler
+  // always calls the latest version without needing it in the dep array.
+  const handlePlayToggleRef = useRef(handlePlayToggle);
+  useEffect(() => { handlePlayToggleRef.current = handlePlayToggle; }, [handlePlayToggle]);
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────
   useEffect(() => {
@@ -323,13 +359,12 @@ function StudioPageContent() {
       }
       if (e.key === ' ') {
         e.preventDefault();
-        handlePlayToggle();
+        handlePlayToggleRef.current();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audio.isPlaying, timeline.notes]);
+  }, [undo, redo]);
 
   // ── Project Metadata & MIDI Loading ────────────────────────────────────
   const midiQueryParam = searchParams.get('midi');
@@ -366,45 +401,17 @@ function StudioPageContent() {
     };
 
     loadProjectData();
-  }, [projectId, midiQueryParam, handleLoadMidi, supabase]);
-
-  // ── Transport controls ─────────────────────────────────────────────────
-  const handlePlayToggle = useCallback(async () => {
-    if (audio.isPlaying) {
-      await audio.pause();
-    } else {
-      await audio.play(
-        timeline.notes,
-        timeline.bpm,
-        (seconds) => setPlayheadSeconds(seconds),
-        () => setPlayheadSeconds(0),
-        playheadSeconds
-      );
-    }
-  }, [audio, timeline.notes, timeline.bpm, playheadSeconds]);
-
-  const handleStop = useCallback(async () => {
-    await audio.stop();
-    setPlayheadSeconds(0);
-  }, [audio]);
-
-  const handleSeek = useCallback((seconds: number) => {
-    setPlayheadSeconds(seconds);
-    audio.seek(seconds);
-  }, [audio]);
-
-  const handleRecord = useCallback(() => {
-    setIsRecording(r => !r);
-  }, []);
-
-
+  // [FIX #7] Removed `supabase` from deps — it's now a stable module-level const.
+  }, [projectId, midiQueryParam, handleLoadMidi]);
 
   // ── AI generation concatenation ────────────────────────────────────────
+  // [FIX #14] Destructure only the stable function references to prevent
+  // a dependency cycle where loadTimeline changes notes → timeline ref changes → callback invalidates.
   const handleAppendGenerated = useCallback((buffer: ArrayBuffer) => {
     const currentState = timeline.getState();
     const merged = appendMidiToTimeline(currentState, buffer);
     timeline.loadTimeline(merged);
-  }, [timeline]);
+  }, [timeline.getState, timeline.loadTimeline]);
 
   // ── Export MIDI blob ───────────────────────────────────────────────────
   const handleExportMidi = useCallback((): Blob => {

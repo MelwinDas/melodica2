@@ -102,9 +102,9 @@ function SheetMusicContent() {
   useEffect(() => {
     const pianoNotes = localStorage.getItem('melodica_piano_notes');
     if (pianoNotes) {
+      // [FIX #11] Only remove the piano notes key, leave the base64 keys alone
+      // since they might be used by the Studio page's "View Sheet Music" feature.
       localStorage.removeItem('melodica_piano_notes');
-      localStorage.removeItem('melodica_midi_base64');
-      localStorage.removeItem('melodica_midi_name');
       (async () => {
         try {
           const parsed = JSON.parse(pianoNotes) as NoteEntry[];

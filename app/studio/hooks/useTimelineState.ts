@@ -143,9 +143,11 @@ export function useTimelineState(undoPush: (cmd: Command) => void) {
     undoPush(cmd);
   }, [undoPush, updateNotes]);
 
+  // [FIX #10] Use reduce instead of Math.max(...spread) to prevent
+  // stack overflow on large note arrays (1000+ notes from AI generation).
   const getEndTime = useCallback((): number => {
     if (notesRef.current.length === 0) return 0;
-    return Math.max(...notesRef.current.map(n => n.time + n.duration));
+    return notesRef.current.reduce((max, n) => Math.max(max, n.time + n.duration), 0);
   }, []);
 
   const getState = useCallback((): TimelineState => ({

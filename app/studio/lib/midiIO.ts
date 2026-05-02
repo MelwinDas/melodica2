@@ -55,8 +55,8 @@ export function timelineToMidiBlob(state: TimelineState): Blob {
  * Calculate the absolute end-time of a timeline sequence.
  */
 export function getTimelineEndTime(state: TimelineState): number {
-  if (state.notes.length === 0) return 0;
-  return Math.max(...state.notes.map(n => n.time + n.duration));
+  // [FIX #10] Use reduce instead of spread to prevent stack overflow on large arrays
+  return state.notes.reduce((max, n) => Math.max(max, n.time + n.duration), 0);
 }
 
 /**
@@ -116,7 +116,8 @@ export function storeMidiInLocalStorage(buffer: ArrayBuffer, filename: string): 
   const CHUNK = 8192;
   let b64 = '';
   for (let i = 0; i < bytes.length; i += CHUNK) {
-    b64 += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+    // [FIX #6] Avoid spread operator (...) which can cause stack overflow on large buffers
+    b64 += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + CHUNK)));
   }
   localStorage.setItem('melodica_midi_base64', btoa(b64));
   localStorage.setItem('melodica_midi_name', filename);

@@ -156,7 +156,6 @@ export default function RightPanel({
         body: fd
       });
 
-      clearInterval(interval);
       if (!res.ok) throw new Error(await res.text());
       setGenProgress(100);
 
@@ -172,9 +171,10 @@ export default function RightPanel({
       onAppendGenerated(arrayBuf);
 
     } catch (e: unknown) {
-      clearInterval(interval);
       setGenError(e instanceof Error ? e.message : 'Generation failed');
     } finally {
+      // [FIX #8] Always clear the progress interval — prevents leaks on mid-processing errors.
+      clearInterval(interval);
       setGenerating(false);
     }
   };
@@ -527,13 +527,29 @@ export default function RightPanel({
               </p>
               {exportFormat === 'midi' ? (
                 <>
-                  <Slider label="Velocity" min={0} max={127} step={1} value={80} onChange={() => {}} />
-                  <Slider label="Tempo (BPM)" min={60} max={200} step={1} value={bpm} onChange={() => {}} />
+                  {/* [FIX #5] These sliders were non-functional decorations.
+                      Now display as read-only informational stats. */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Velocity</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-purple-light)', fontFamily: 'monospace' }}>Default (100)</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Tempo</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-purple-light)', fontFamily: 'monospace' }}>{bpm} BPM</span>
+                  </div>
                 </>
               ) : (
                 <>
-                  <Slider label="Bitrate (kbps)" min={128} max={320} step={32} value={256} onChange={() => {}} format={v => `${v} kbps`} />
-                  <Slider label="Volume Normalize" min={-3} max={0} step={0.1} value={-0.1} onChange={() => {}} format={v => `${v.toFixed(1)} dBFS`} />
+                  {/* [FIX #5] Audio export settings are informational — actual encoding
+                      uses browser defaults. Show as read-only labels. */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Format</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-purple-light)', fontFamily: 'monospace' }}>16-bit PCM WAV</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Quality</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-purple-light)', fontFamily: 'monospace' }}>Lossless</span>
+                  </div>
                 </>
               )}
             </div>
