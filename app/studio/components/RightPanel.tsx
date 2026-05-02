@@ -257,12 +257,30 @@ export default function RightPanel({
             <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>AI Studio Generation</h3>
             <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 20 }}>
               Generate music and append to the current timeline.
-              {!backendAlive && (
-                <span style={{ color: '#f87171', marginLeft: 6 }}>
-                  Run: <code style={{ background: 'var(--bg-card)', padding: '1px 6px', borderRadius: 4, fontSize: 11 }}>uvicorn api:app --reload</code> in Melo_API/
-                </span>
-              )}
             </p>
+
+            {backendAlive === false && (
+              <div style={{
+                marginBottom: 20, padding: '14px 16px',
+                background: 'rgba(251, 191, 36, 0.08)',
+                border: '1px solid rgba(251, 191, 36, 0.25)',
+                borderRadius: 10,
+                display: 'flex', alignItems: 'center', gap: 12,
+              }}>
+                <span className="material-symbols-rounded" style={{
+                  fontSize: 22, color: '#fbbf24',
+                  animation: 'spin 2s linear infinite',
+                }}>progress_activity</span>
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: '#fbbf24', marginBottom: 2 }}>
+                    AI Model is warming up…
+                  </p>
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                    The model is loading on the server. This can take a few minutes on first use. It will connect automatically once ready.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Genre */}
             <div style={{ marginBottom: 16 }}>

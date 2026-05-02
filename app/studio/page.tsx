@@ -78,11 +78,37 @@ function StudioPageContent() {
     };
   }, [rightPanelCollapsed]);
 
-  // ── Backend health ─────────────────────────────────────────────────────
+  // ── Backend health (with polling for cold-start / model loading) ───────
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/health`, { signal: AbortSignal.timeout(3000) })
-      .then(r => setBackendAlive(r.ok))
-      .catch(() => setBackendAlive(false));
+    let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const checkHealth = () => {
+      fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/health`, { signal: AbortSignal.timeout(5000) })
+        .then(r => {
+          if (cancelled) return;
+          setBackendAlive(r.ok);
+          // Stop polling once backend is alive
+          if (r.ok && intervalId) {
+            clearInterval(intervalId);
+            intervalId = null;
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setBackendAlive(false);
+        });
+    };
+
+    checkHealth();
+    // Poll every 15s while backend is not yet alive
+    intervalId = setInterval(() => {
+      checkHealth();
+    }, 15000);
+
+    return () => {
+      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
+    };
   }, []);
 
   // ── Load piano recording from localStorage (from piano page) ──────────

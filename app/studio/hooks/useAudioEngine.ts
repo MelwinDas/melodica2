@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Midi } from '@tonejs/midi';
 import { TimelineNote } from '../lib/types';
 
@@ -22,6 +22,26 @@ export function useAudioEngine() {
       if (synthRef.current) { synthRef.current.dispose(); synthRef.current = null; }
     } catch { /* ignore */ }
     transportRef.current = null;
+  }, []);
+
+  // Stop all audio when the component unmounts (e.g. navigating away)
+  useEffect(() => {
+    return () => {
+      // Synchronously cancel any pending animation frame
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0;
+      // Dispose Tone.js resources
+      try {
+        // Use dynamic import inline for cleanup
+        import('tone').then((Tone) => {
+          Tone.getTransport().stop();
+          Tone.getTransport().cancel();
+          if (partRef.current) { partRef.current.dispose(); partRef.current = null; }
+          if (synthRef.current) { synthRef.current.dispose(); synthRef.current = null; }
+        }).catch(() => { /* ignore */ });
+      } catch { /* ignore */ }
+      transportRef.current = null;
+    };
   }, []);
 
   const play = useCallback(async (

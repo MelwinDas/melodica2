@@ -103,11 +103,12 @@ export default function TransportBar({
         }}>
           <div style={{
             width: 7, height: 7, borderRadius: '50%',
-            background: backendAlive === null ? '#6b6890' : backendAlive ? '#10b981' : '#ef4444',
+            background: backendAlive === null ? '#6b6890' : backendAlive ? '#10b981' : '#fbbf24',
             boxShadow: backendAlive ? '0 0 8px rgba(16,185,129,0.4)' : 'none',
+            animation: backendAlive === false ? 'pulse 1.5s ease-in-out infinite' : 'none',
           }} />
           <span className="hide-mobile" style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>
-            {backendAlive ? 'AI READY' : 'AI OFFLINE'}
+            {backendAlive === null ? 'AI …' : backendAlive ? 'AI READY' : 'AI LOADING…'}
           </span>
         </div>
       </div>
