@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useMemo } from 'react';
 import type { RecordedMidiEvent, QuantizeGrid } from '../hooks/usePianoEngine';
 
 interface Props {
@@ -26,11 +26,16 @@ const MEASURE_W = 240;
 const STAFF_H   = 200; // Increased height to prevent overlapping notes
 const START_OFFSET = 100; // Alignment absolute offset
 
+// [FIX #5] Debounce interval for VexFlow re-renders during recording (ms)
+const VEXFLOW_DEBOUNCE_MS = 500;
+
 export default function SheetMusicStage({
   tracks, liveNotes, playheadSeconds, isPlaying, isRecording, bpm, timeSignature, quantize, onSeek,
 }: Props) {
   const svgParentRef = useRef<HTMLDivElement>(null);
   const scrollRef    = useRef<HTMLDivElement>(null);
+  // [FIX #5] Debounce timer ref for VexFlow renders during recording
+  const renderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // All tracks including live recording
   const allTracks = liveNotes.length > 0 ? [...tracks, liveNotes] : tracks;
@@ -46,84 +51,115 @@ export default function SheetMusicStage({
   const numTracks     = Math.max(allTracks.length, 1);
   const totalHeight   = numTracks * STAFF_H + 40;
 
+  // [FIX #5] Memoize a snapshot of the tracks data to detect real changes,
+  // avoiding re-renders when only playhead/position changes.
+  const tracksSnapshot = useMemo(() => {
+    // During recording, use liveNotes.length as a proxy for change detection
+    // (the actual rendering is debounced below)
+    return { tracks, liveNotesLen: liveNotes.length };
+  }, [tracks, liveNotes.length]);
+
   // ── Render VexFlow staves ────────────────────────────────────────────
+  // [FIX #5] Debounce renders during recording to avoid freezing on every note-off
   useEffect(() => {
-    if (!svgParentRef.current) return;
-    const el = svgParentRef.current;
-    el.innerHTML = '';
+    const doRender = () => {
+      if (!svgParentRef.current) return;
+      const el = svgParentRef.current;
+      el.innerHTML = '';
 
-    import('vexflow').then((vexModule) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const Vex: any = (vexModule as any).default ?? vexModule;
-      const F = Vex.Flow ?? Vex;
-      const { Renderer, Stave, StaveNote, Voice, Formatter, Accidental } = F;
+      import('vexflow').then((vexModule) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const Vex: any = (vexModule as any).default ?? vexModule;
+        const F = Vex.Flow ?? Vex;
+        const { Renderer, Stave, StaveNote, Accidental } = F;
 
-      const renderer = new Renderer(el, Renderer.Backends.SVG);
-      renderer.resize(totalWidth, totalHeight);
-      const ctx = renderer.getContext();
-      ctx.setFont('Arial', 10);
-      const svg = (ctx as unknown as { svg: SVGElement }).svg;
-      if (svg) svg.style.background = 'transparent';
+        const renderer = new Renderer(el, Renderer.Backends.SVG);
+        renderer.resize(totalWidth, totalHeight);
+        const ctx = renderer.getContext();
+        ctx.setFont('Arial', 10);
+        const svg = (ctx as unknown as { svg: SVGElement }).svg;
+        if (svg) svg.style.background = 'transparent';
 
-      // Render each track as a separate staff row
-      const renderTracks = allTracks.length > 0 ? allTracks : [[]];
-      renderTracks.forEach((track, trackIdx) => {
-        const yOffset = trackIdx * STAFF_H + 50;
+        // Render each track as a separate staff row
+        const renderTracks = allTracks.length > 0 ? allTracks : [[]];
+        renderTracks.forEach((track, trackIdx) => {
+          const yOffset = trackIdx * STAFF_H + 50;
 
-        // Track label
-        if (renderTracks.length > 1) {
-          ctx.save();
-          ctx.setFont('Arial', 9, 'italic');
-          const isLive = trackIdx === renderTracks.length - 1 && liveNotes.length > 0;
-          ctx.setFillStyle(isLive ? '#ec4899' : '#a09aba');
-          ctx.fillText(isLive ? '● LIVE' : `Track ${trackIdx + 1}`, 10, yOffset - 10);
-          ctx.restore();
-        }
-
-        for (let m = 0; m < totalMeasures; m++) {
-          const isFirst = m === 0;
-          const x = isFirst ? START_OFFSET - 80 : START_OFFSET + m * MEASURE_W;
-          const w = isFirst ? MEASURE_W + 80 : MEASURE_W;
-          
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const stave: any = new Stave(x, yOffset, w);
-          if (isFirst) {
-            stave.addClef('treble');
-            if (trackIdx === 0) stave.addTimeSignature(timeSignature);
+          // Track label
+          if (renderTracks.length > 1) {
+            ctx.save();
+            ctx.setFont('Arial', 9, 'italic');
+            const isLive = trackIdx === renderTracks.length - 1 && liveNotes.length > 0;
+            ctx.setFillStyle(isLive ? '#ec4899' : '#a09aba');
+            ctx.fillText(isLive ? '● LIVE' : `Track ${trackIdx + 1}`, 10, yOffset - 10);
+            ctx.restore();
           }
-          stave.setContext(ctx).draw();
 
-          const mStart = m * beatsPerMeasure * secPerBeat;
-          const mEnd   = (m + 1) * beatsPerMeasure * secPerBeat;
-          const mn     = track.filter(n => n.time >= mStart && n.time < mEnd);
-
-          for (const n of mn) {
-            let duration = 'q';
-            if (n.duration < secPerBeat * 0.35) duration = '16';
-            else if (n.duration < secPerBeat * 0.75) duration = '8';
-            else if (n.duration < secPerBeat * 1.5) duration = 'q';
-            else duration = 'h';
-
-            const sn = new StaveNote({ keys: [toVexPitch(n.midi)], duration });
-            if (midiHasSharp(n.midi)) sn.addModifier(new Accidental('#'));
-
-            const absX = START_OFFSET + (n.time / secPerBeat) * (MEASURE_W / beatsPerMeasure);
+          for (let m = 0; m < totalMeasures; m++) {
+            const isFirst = m === 0;
+            const x = isFirst ? START_OFFSET - 80 : START_OFFSET + m * MEASURE_W;
+            const w = isFirst ? MEASURE_W + 80 : MEASURE_W;
             
-            sn.setStave(stave);
-            sn.setContext(ctx);
-            const tc = new F.TickContext();
-            tc.setX(absX - stave.getNoteStartX() - 5);
-            sn.setTickContext(tc);
-            const mc = new F.ModifierContext();
-            sn.addToModifierContext(mc);
-            sn.preFormat();
-            sn.draw();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const stave: any = new Stave(x, yOffset, w);
+            if (isFirst) {
+              stave.addClef('treble');
+              if (trackIdx === 0) stave.addTimeSignature(timeSignature);
+            }
+            stave.setContext(ctx).draw();
+
+            const mStart = m * beatsPerMeasure * secPerBeat;
+            const mEnd   = (m + 1) * beatsPerMeasure * secPerBeat;
+            const mn     = track.filter(n => n.time >= mStart && n.time < mEnd);
+
+            for (const n of mn) {
+              let duration = 'q';
+              if (n.duration < secPerBeat * 0.35) duration = '16';
+              else if (n.duration < secPerBeat * 0.75) duration = '8';
+              else if (n.duration < secPerBeat * 1.5) duration = 'q';
+              else duration = 'h';
+
+              const sn = new StaveNote({ keys: [toVexPitch(n.midi)], duration });
+              if (midiHasSharp(n.midi)) sn.addModifier(new Accidental('#'));
+
+              const absX = START_OFFSET + (n.time / secPerBeat) * (MEASURE_W / beatsPerMeasure);
+              
+              sn.setStave(stave);
+              sn.setContext(ctx);
+              const tc = new F.TickContext();
+              tc.setX(absX - stave.getNoteStartX() - 5);
+              sn.setTickContext(tc);
+              const mc = new F.ModifierContext();
+              sn.addToModifierContext(mc);
+              sn.preFormat();
+              sn.draw();
+            }
           }
-        }
+        });
       });
-    });
+    };
+
+    // During recording, debounce VexFlow re-renders to avoid performance issues
+    if (isRecording && liveNotes.length > 0) {
+      if (renderTimerRef.current) clearTimeout(renderTimerRef.current);
+      renderTimerRef.current = setTimeout(doRender, VEXFLOW_DEBOUNCE_MS);
+    } else {
+      // When not recording, render immediately
+      if (renderTimerRef.current) {
+        clearTimeout(renderTimerRef.current);
+        renderTimerRef.current = null;
+      }
+      doRender();
+    }
+
+    return () => {
+      if (renderTimerRef.current) {
+        clearTimeout(renderTimerRef.current);
+        renderTimerRef.current = null;
+      }
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tracks, liveNotes, bpm, timeSignature, totalMeasures, totalWidth, totalHeight, secPerBeat, beatsPerMeasure]);
+  }, [tracksSnapshot, bpm, timeSignature, totalMeasures, totalWidth, totalHeight, secPerBeat, beatsPerMeasure, isRecording]);
 
   // ── Playhead X position ─────────────────────────────────────────────
   const getPlayheadX = useCallback((seconds: number = playheadSeconds) => {

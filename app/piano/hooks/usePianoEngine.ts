@@ -58,16 +58,22 @@ export function usePianoEngine() {
   const bpmRef          = useRef(120);
   const timeSignatureRef = useRef('4/4');
   const isPlayingRef    = useRef(false);
+  // [FIX #1] Track count-in interval so it can be cleared on stop/unmount
+  const countInIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // [FIX #4] Track the playback synth so we can dispose it on replay/stop
+  const playbackSynthRef = useRef<import('tone').PolySynth | null>(null);
+  const playbackPartsRef = useRef<import('tone').Part[]>([]);
 
   useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
   useEffect(() => { bpmRef.current = bpm; }, [bpm]);
   useEffect(() => { tracksRef.current = tracks; }, [tracks]);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+  // [FIX #8] Guard transportRef before accessing properties
   useEffect(() => {
     timeSignatureRef.current = timeSignature;
     if (transportRef.current) {
         const num = parseInt(timeSignature.split('/')[0]) || 4;
-        transportRef.current.timeSignature = num;
+        try { transportRef.current.timeSignature = num; } catch { /* transport not ready */ }
     }
   }, [timeSignature]);
 
@@ -174,9 +180,35 @@ export function usePianoEngine() {
     setMetronomeFlash(false);
   }, []);
 
+  // [FIX #1] Helper to clear any pending count-in interval
+  const clearCountInInterval = useCallback(() => {
+    if (countInIntervalRef.current !== null) {
+      clearInterval(countInIntervalRef.current);
+      countInIntervalRef.current = null;
+    }
+    setCountInActive(false);
+    setCountInBeat(0);
+  }, []);
+
+  // [FIX #4] Helper to dispose playback synth/parts
+  const disposePlaybackResources = useCallback(() => {
+    if (playbackSynthRef.current) {
+      try { playbackSynthRef.current.dispose(); } catch { /* ignore */ }
+      playbackSynthRef.current = null;
+    }
+    for (const p of playbackPartsRef.current) {
+      try { p.dispose(); } catch { /* ignore */ }
+    }
+    playbackPartsRef.current = [];
+  }, []);
+
   const stop = useCallback(async () => {
+    // [FIX #1] Clear any pending count-in interval
+    clearCountInInterval();
     stopTickLoop();
     stopMetronome();
+    // [FIX #4] Dispose any leftover playback synth
+    disposePlaybackResources();
     isRecordingRef.current = false;
     if (transportRef.current) {
       transportRef.current.stop();
@@ -189,7 +221,7 @@ export function usePianoEngine() {
     setRecordingPaused(false);
     setPosition({ bars: 1, beats: 1, ticks: 0 });
     setPlayheadSeconds(0);
-  }, [stopTickLoop, stopMetronome]);
+  }, [stopTickLoop, stopMetronome, clearCountInInterval, disposePlaybackResources]);
 
   const play = useCallback(async () => {
     if (!toneRef.current) return;
@@ -274,19 +306,21 @@ export function usePianoEngine() {
 
     let beatCount = 0;
     const beatMs = (60 / bpmRef.current) * 1000;
-    const countInterval = setInterval(() => {
+    // [FIX #1] Store interval ref so it can be cleared on stop/unmount
+    clearCountInInterval(); // clear any previous one
+    countInIntervalRef.current = setInterval(() => {
       beatCount++;
       setCountInBeat(beatCount);
       if (beatCount >= totalBeats) {
-        clearInterval(countInterval);
-        setCountInActive(false);
-        setCountInBeat(0);
+        clearCountInInterval();
         doRecord();
       }
     }, beatMs);
-  }, [countIn, metronomeEnabled, startMetronome, startTickLoop]);
+  }, [countIn, metronomeEnabled, startMetronome, startTickLoop, clearCountInInterval]);
 
   const stopRecording = useCallback(() => {
+    // [FIX #1] Clear any pending count-in interval
+    clearCountInInterval();
     const completedNotes = [...currentTrackRef.current];
     isRecordingRef.current = false;
     setIsRecording(false);
@@ -302,7 +336,7 @@ export function usePianoEngine() {
     if (completedNotes.length > 0) {
       setTracks(prev => [...prev, completedNotes]);
     }
-  }, [stopTickLoop]);
+  }, [stopTickLoop, clearCountInInterval]);
 
   const playAllTracks = useCallback(async () => {
     const allTracks = tracksRef.current;
@@ -320,11 +354,15 @@ export function usePianoEngine() {
     const allNotes = allTracks.flat();
     if (allNotes.length === 0) return;
 
+    // [FIX #4] Dispose any existing playback synth before creating a new one
+    disposePlaybackResources();
+
     const synth = new Tone.PolySynth(Tone.Synth, {
       oscillator: { type: 'triangle' },
       envelope: { attack: 0.02, decay: 0.1, sustain: 0.5, release: 0.8 },
     }).toDestination();
     synth.set({ volume: -6 });
+    playbackSynthRef.current = synth;
 
     const endTime = Math.max(...allNotes.map(n => n.time + n.duration));
 
@@ -342,13 +380,13 @@ export function usePianoEngine() {
       part.start(0);
       parts.push(part);
     }
+    playbackPartsRef.current = parts;
 
     transport.scheduleOnce(() => {
       setIsPlaying(false);
       stopTickLoop();
       stopMetronome();
-      synth.dispose();
-      parts.forEach(p => p.dispose());
+      disposePlaybackResources();
     }, endTime + 0.5);
 
     transport.seconds = 0;
@@ -357,7 +395,7 @@ export function usePianoEngine() {
     setIsPlaying(true);
     if (metronomeEnabled) startMetronome();
     startTickLoop();
-  }, [metronomeEnabled, startMetronome, stopMetronome, startTickLoop, stopTickLoop]);
+  }, [metronomeEnabled, startMetronome, stopMetronome, startTickLoop, stopTickLoop, disposePlaybackResources]);
 
   const seek = useCallback((seconds: number) => {
     setPlayheadSeconds(seconds);
@@ -373,6 +411,9 @@ export function usePianoEngine() {
     });
   }, []);
 
+  // [FIX #3] Use transport-relative time consistently for recording.
+  // When the transport is not running, use 0 as fallback (recording should
+  // only happen while transport is running, but this guards edge cases).
   const noteOn = useCallback((midi: number, velocity = 100) => {
     if (!samplerRef.current || !samplerReady || !toneRef.current) return;
     const Tone = toneRef.current;
@@ -381,7 +422,8 @@ export function usePianoEngine() {
     try { samplerRef.current.triggerAttack(noteStr, undefined, velocity / 127); } catch { /* ignore */ }
 
     setLastVelocity(velocity);
-    const currentTime = transportRef.current ? transportRef.current.seconds : Date.now() / 1000;
+    // Always use transport time (relative) — falls back to 0 if transport not available
+    const currentTime = transportRef.current?.seconds ?? 0;
     activeKeysRef.current.set(midi, { startTime: currentTime, velocity });
   }, [samplerReady]);
 
@@ -394,7 +436,8 @@ export function usePianoEngine() {
     const active = activeKeysRef.current.get(midi);
     if (active) {
       activeKeysRef.current.delete(midi);
-      const currentTime = transportRef.current ? transportRef.current.seconds : Date.now() / 1000;
+      // [FIX #3] Always use transport-relative time
+      const currentTime = transportRef.current?.seconds ?? active.startTime;
       const duration = Math.max(0.05, currentTime - active.startTime);
 
       if (isRecordingRef.current) {
@@ -412,6 +455,7 @@ export function usePianoEngine() {
     setLastVelocity(0);
   }, [snapTime]);
 
+  // [FIX #2] Keyboard listeners are ONLY here in the engine — removed from page.tsx
   useEffect(() => {
     const pressedCodes = new Map<string, number>();
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -445,6 +489,19 @@ export function usePianoEngine() {
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, [noteOn, noteOff]);
+
+  // [FIX #2] Expose currently-pressed MIDI keys for visual feedback in the page
+  const [pressedMidiKeys, setPressedMidiKeys] = useState<Set<string>>(new Set());
+
+  // Sync pressedMidiKeys from activeKeysRef (updated on noteOn/noteOff via a lightweight effect)
+  useEffect(() => {
+    // We piggyback on lastVelocity changes (which happen on every noteOn/noteOff)
+    const keys = new Set<string>();
+    for (const midi of activeKeysRef.current.keys()) {
+      keys.add(String(midi));
+    }
+    setPressedMidiKeys(keys);
+  }, [lastVelocity]);
 
   const trimSilence = useCallback(() => {
     setTracks(prev => prev.map(track => {
@@ -483,13 +540,21 @@ export function usePianoEngine() {
     });
   }, [startMetronome, stopMetronome]);
 
+  // [FIX #1] Cleanup count-in interval on unmount
+  useEffect(() => {
+    return () => {
+      if (countInIntervalRef.current !== null) {
+        clearInterval(countInIntervalRef.current);
+      }
+    };
+  }, []);
+
   const allNoteCount = tracks.reduce((s, t) => s + t.length, 0) + liveNotes.length;
 
-  return useMemo(() => ({
-    isPlaying, isRecording, recordingPaused, bpm, timeSignature, position, playheadSeconds,
-    metronomeEnabled, metronomeFlash, quantize, countIn,
-    countInActive, countInBeat, lastVelocity, samplerReady,
-    tracks, liveNotes, allNoteCount,
+  // [FIX #6] Stabilize the engine object reference by splitting into
+  // a stable methods object and separate frequently-changing values.
+  // Methods only change when their useCallback deps change (rarely).
+  const methods = useMemo(() => ({
     play, pause, stop,
     startRecording, pauseRecording, resumeRecording, stopRecording,
     playAllTracks, seek,
@@ -498,10 +563,6 @@ export function usePianoEngine() {
     trimSilence, clearAllTracks,
     exportMidiBlob,
   }), [
-    isPlaying, isRecording, recordingPaused, bpm, timeSignature, position, playheadSeconds,
-    metronomeEnabled, metronomeFlash, quantize, countIn,
-    countInActive, countInBeat, lastVelocity, samplerReady,
-    tracks, liveNotes, allNoteCount,
     play, pause, stop,
     startRecording, pauseRecording, resumeRecording, stopRecording,
     playAllTracks, seek,
@@ -509,5 +570,24 @@ export function usePianoEngine() {
     setQuantize, setCountIn, toggleMetronome,
     trimSilence, clearAllTracks,
     exportMidiBlob,
+  ]);
+
+  return useMemo(() => ({
+    // Frequently-changing state values
+    isPlaying, isRecording, recordingPaused, bpm, timeSignature, position, playheadSeconds,
+    metronomeEnabled, metronomeFlash, quantize, countIn,
+    countInActive, countInBeat, lastVelocity, samplerReady,
+    tracks, liveNotes, allNoteCount,
+    // [FIX #2] Expose pressed keys for visual highlighting
+    pressedMidiKeys,
+    // Stable method references
+    ...methods,
+  }), [
+    isPlaying, isRecording, recordingPaused, bpm, timeSignature, position, playheadSeconds,
+    metronomeEnabled, metronomeFlash, quantize, countIn,
+    countInActive, countInBeat, lastVelocity, samplerReady,
+    tracks, liveNotes, allNoteCount,
+    pressedMidiKeys,
+    methods,
   ]);
 }

@@ -11,7 +11,6 @@ const VirtualPiano    = dynamic(() => import('./components/VirtualPiano'),    { 
 export default function PianoPage() {
   const engine = usePianoEngine();
   const [backendAlive, setBackendAlive] = useState<boolean | null>(null);
-  const [pressedKeys,  setPressedKeys]  = useState<Set<string>>(new Set());
   const [showSidebar,  setShowSidebar]  = useState(false);
 
   // Backend health check
@@ -21,52 +20,21 @@ export default function PianoPage() {
       .catch(() => setBackendAlive(false));
   }, []);
 
-  // ── Note handlers (also set pressed keys for visual feedback) ───────
+  // [FIX #2] Note handlers for VirtualPiano (mouse/touch) — visual feedback
+  // comes from engine.pressedMidiKeys now, so no duplicate key listeners needed.
   const handleNoteOn = useCallback((midi: number, velocity: number) => {
     engine.noteOn(midi, velocity);
-    setPressedKeys(prev => new Set(prev).add(String(midi)));
-  }, [engine]);
+  }, [engine.noteOn]);
 
   const handleNoteOff = useCallback((midi: number) => {
     engine.noteOff(midi);
-    setPressedKeys(prev => { const s = new Set(prev); s.delete(String(midi)); return s; });
-  }, [engine]);
+  }, [engine.noteOff]);
 
-  // ── Sync QWERTY visual highlights ───────────────────────────────────
-  useEffect(() => {
-    const QWERTY: Record<string, number> = {
-      'a':0,'w':1,'s':2,'e':3,'d':4,'f':5,'t':6,'g':7,'y':8,'h':9,'u':10,'j':11,'k':12,'o':13,'l':14,
-    };
-    const baseOct = 4;
-    const pressedCodes = new Map<string, number>();
-
-    const onDown = (e: KeyboardEvent) => {
-      if (['INPUT','SELECT','TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
-      const key = e.key.toLowerCase();
-      if (pressedCodes.has(key)) return;
-      const semi = QWERTY[key];
-      if (semi !== undefined) {
-        const capsOn = e.getModifierState('CapsLock');
-        const oct = capsOn ? 2 : baseOct;
-        const midi = semi + (oct + 1) * 12;
-        pressedCodes.set(key, midi);
-        setPressedKeys(prev => new Set(prev).add(String(midi)));
-      }
-    };
-    const onUp = (e: KeyboardEvent) => {
-      const key = e.key.toLowerCase();
-      const midi = pressedCodes.get(key);
-      if (midi !== undefined) {
-        setPressedKeys(prev => { const s = new Set(prev); s.delete(String(midi)); return s; });
-        pressedCodes.delete(key);
-      }
-    };
-    window.addEventListener('keydown', onDown);
-    window.addEventListener('keyup',   onUp);
-    return () => { window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp); };
-  }, []);
+  // [FIX #2] Removed the duplicate QWERTY keyboard listener that was in page.tsx.
+  // The engine hook (usePianoEngine.ts) is now the single source of keyboard input.
 
   // ── Spacebar = Play/Pause ────────────────────────────────────────────
+  // [FIX #6] Depend on stable refs instead of the entire engine object
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (['INPUT','SELECT','TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
@@ -79,31 +47,39 @@ export default function PianoPage() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [engine]);
+  }, [engine.isPlaying, engine.tracks.length, engine.pause, engine.playAllTracks, engine.play]);
 
   // ── Play All / Pause toggle ──────────────────────────────────────────
   const handlePlayAll = useCallback(() => {
     if (engine.isPlaying) { engine.pause(); return; }
     if (engine.tracks.length > 0) { engine.playAllTracks(); return; }
     engine.play();
-  }, [engine]);
+  }, [engine.isPlaying, engine.tracks.length, engine.pause, engine.playAllTracks, engine.play]);
 
-  // ── Open in Studio ───────────────────────────────────────────────────
+  // [FIX #7] Open in Studio — use chunked base64 encoding without spread operator
+  // to avoid exceeding the JS engine's maximum argument limit on large MIDI files.
   const handleOpenStudio = useCallback(async () => {
     const allNotes = engine.tracks.flat();
     if (allNotes.length > 0) {
       const blob = await engine.exportMidiBlob();
       const buf  = await blob.arrayBuffer();
       const bytes = new Uint8Array(buf);
-      const CHUNK = 8192; let b64 = '';
-      for (let i = 0; i < bytes.length; i += CHUNK)
-        b64 += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-      localStorage.setItem('melodica_midi_base64',  btoa(b64));
+
+      // Build base64 without spread operator to avoid stack overflow on large files
+      const CHUNK = 8192;
+      const chunks: string[] = [];
+      for (let i = 0; i < bytes.length; i += CHUNK) {
+        const slice = bytes.subarray(i, Math.min(i + CHUNK, bytes.length));
+        // Use Array.from to avoid spread on TypedArray which can hit arg limits
+        chunks.push(String.fromCharCode.apply(null, Array.from(slice)));
+      }
+      const b64 = btoa(chunks.join(''));
+      localStorage.setItem('melodica_midi_base64',  b64);
       localStorage.setItem('melodica_midi_name',    'Piano Recording.mid');
       localStorage.setItem('melodica_upload_pending','true');
     }
     window.location.href = '/studio';
-  }, [engine]);
+  }, [engine.tracks, engine.exportMidiBlob]);
 
   // ── Count-in overlay ─────────────────────────────────────────────────
   const countInOverlay = engine.countInActive && (
@@ -188,7 +164,7 @@ export default function PianoPage() {
           {/* Virtual Piano — fixed to bottom, doesn't shrink natively */}
           <div style={{ flexShrink: 0, width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
             <VirtualPiano
-              pressedKeys={pressedKeys}
+              pressedKeys={engine.pressedMidiKeys}
               onNoteOn={handleNoteOn}
               onNoteOff={handleNoteOff}
             />
